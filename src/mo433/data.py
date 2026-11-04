@@ -1,4 +1,4 @@
-"""STL-10 loading and the student input normalization (spec §2, §7.1, §12.1).
+"""STL-10 access and the student input normalization (spec §2, §7.1, §12.1).
 
 Images travel as uint8 NHWC ``[N, 96, 96, 3]`` tensors (the view pool's layout) and are
 turned into float input only on the device that runs the model, by ``normalize``. The same
@@ -8,13 +8,29 @@ per-step normalization of pool views in training.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import torch
 
 from mo433 import paths
 
+N_LABELED_TRAIN = 5_000
+N_UNLABELED = 100_000
+N_CLASSES = 10
+
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
+
+
+def train_labels(data_root: Path | None = None) -> np.ndarray:
+    """Labels of the 5k labeled train split, 0-based, identical to
+    ``torchvision.datasets.STL10(data_root, split="train").labels`` but without reading images."""
+    root = Path(data_root) if data_root is not None else paths.data_root()
+    raw = np.fromfile(root / "stl10_binary" / "train_y.bin", dtype=np.uint8)
+    if raw.shape != (N_LABELED_TRAIN,):
+        raise ValueError(f"unexpected train_y.bin shape {raw.shape}")
+    return raw.astype(np.int64) - 1
 
 
 def normalize(u8: torch.Tensor) -> torch.Tensor:
