@@ -62,6 +62,22 @@ def test_cache_is_float16_n_k_384_and_rows_match_a_live_forward(tmp_path):
         assert cos > 0.999
 
 
+@pytest.mark.gpu
+def test_verify_cache_accepts_the_built_cache_and_rejects_a_misaligned_one(tmp_path):
+    from mo433.encoders import load_encoder
+
+    enc = load_encoder("D").to("cuda")
+    views = np.random.default_rng(1).integers(0, 256, (5, 2, 96, 96, 3), dtype=np.uint8)
+    teacher.build_cache(views, tmp_path / "cache.npy", enc, log=lambda s: None)
+    cache = np.load(tmp_path / "cache.npy")
+
+    ok = teacher.verify_cache(views, cache, enc, n_pairs=4)
+    assert ok["passed"] and ok["min_cosine"] > 0.999 and len(ok["pairs"]) == 4
+
+    shifted = np.roll(cache, 1, axis=0)  # row j holds image j-1's features
+    assert not teacher.verify_cache(views, shifted, enc, n_pairs=4)["passed"]
+
+
 def _synthetic_features(constant: bool):
     rng = np.random.default_rng(0)
     y_train, y_test = rng.integers(0, 10, 5000), rng.integers(0, 10, 8000)
