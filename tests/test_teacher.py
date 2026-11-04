@@ -60,3 +60,29 @@ def test_cache_is_float16_n_k_384_and_rows_match_a_live_forward(tmp_path):
         # The cached vector points the same way as the live one (cosine ~ 1).
         cos = live @ cache[j, v].astype(np.float32) / np.linalg.norm(live) / np.linalg.norm(cache[j, v].astype(np.float32))
         assert cos > 0.999
+
+
+def _synthetic_features(constant: bool):
+    rng = np.random.default_rng(0)
+    y_train, y_test = rng.integers(0, 10, 5000), rng.integers(0, 10, 8000)
+
+    def feats(y):
+        if constant:
+            return np.ones((len(y), 16), dtype=np.float32)
+        return (np.eye(16)[y] + 0.05 * rng.standard_normal((len(y), 16))).astype(np.float32)
+
+    return {"train_x": feats(y_train), "train_y": y_train, "test_x": feats(y_test), "test_y": y_test}
+
+
+def test_sanity_passes_for_class_separated_features():
+    record = teacher.sanity_record(_synthetic_features(constant=False))
+    assert record["teacher_check"]["passed"] is True
+    assert record["val_stats"]["knn"] > 0.99 and record["test_knn_100"] > 0.99
+    assert record["val_stats"]["nmi"] > 0.9 and record["val_stats"]["spread"] > 0.3
+    assert record["teacher_check"]["reference_knn"] == 0.745
+
+
+def test_sanity_fails_for_collapsed_features():
+    record = teacher.sanity_record(_synthetic_features(constant=True))
+    assert record["teacher_check"]["passed"] is False
+    assert record["teacher_check"]["reasons"]["spread"] is True
