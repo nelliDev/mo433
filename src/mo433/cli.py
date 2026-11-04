@@ -72,7 +72,13 @@ def _pool(ctx: Context, args: argparse.Namespace) -> None:
 
 @command("teacher", help="teacher sanity check and teacher-feature cache (spec §3, §4.1)")
 def _teacher(ctx: Context, args: argparse.Namespace) -> None:
-    raise NotImplementedError("teacher")
+    from mo433 import extract, teacher
+
+    # Sanity first (cheap; spec §7.3: it must pass before any C run), then the cache. A failed
+    # sanity check raises, leaving no teacher/sanity marker and building no cache.
+    ctx.run_stage("extract/D", lambda: extract.extract("D", ctx.profile))
+    ctx.run_stage("teacher/sanity", lambda: teacher.run_sanity(ctx.profile))
+    ctx.run_stage("teacher/cache", lambda: teacher.build_teacher_cache(ctx.profile))
 
 
 # ---------------------------------------------------------------- training
