@@ -88,13 +88,29 @@ def _train_args(p: argparse.ArgumentParser) -> None:
         action="store_true",
         help="row B only: fresh VICRegViewTransform views every step instead of the pool (spec §6.4)",
     )
+    p.add_argument("--knn-every", type=int, default=None,
+                   help="validation k-NN every N epochs (monitoring only; default 1, 0 = never)")
 
 
 @command("train", help="one run of row B or C", add_args=_train_args)
 def _train(ctx: Context, args: argparse.Namespace) -> None:
     if args.on_the_fly and args.row != "B":
         raise SystemExit("--on-the-fly applies to row B only")
-    raise NotImplementedError(f"train {config_mod.run_id(args.row, args.size, args.frac, args.seed)}")
+    from mo433 import paths, train
+
+    rid = config_mod.run_id(args.row, args.size, args.frac, args.seed)
+    # The fixed-view control's on-the-fly twin gets its own run dir and stage name, so it
+    # never collides with (or resumes from) the pool run of the same id.
+    name = f"{rid}-otf" if args.on_the_fly else rid
+    overrides = {"knn_every": args.knn_every} if args.knn_every is not None else None
+
+    def build() -> None:
+        train.train_run(
+            args.row, args.size, args.frac, args.seed, profile=ctx.profile, overrides=overrides,
+            run_dir=paths.run_dir(name, ctx.profile), on_the_fly=args.on_the_fly, fresh=ctx.force,
+        )
+
+    ctx.run_stage(f"train/{name}", build)
 
 
 @command("train-all", help="all 20 reported runs in week-3 order (spec §8)")
