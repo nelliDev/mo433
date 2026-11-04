@@ -43,4 +43,5 @@ addopts = "-ra"
 markers = [
     "data: needs the STL-10 binaries under $MO433_DATA (default data/)",
     "gpu: needs a CUDA GPU",
+    "weights: needs pretrained weights (timm/HF cache or network)",
 ]

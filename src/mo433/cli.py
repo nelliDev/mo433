@@ -150,7 +150,10 @@ def _diagnose(ctx: Context, args: argparse.Namespace) -> None:
 
 @command("measure", help="params, FLOPs, latency, GPU-hours (spec §7.4)")
 def _measure(ctx: Context, args: argparse.Namespace) -> None:
-    raise NotImplementedError("measure")
+    from mo433 import measure
+
+    # Cheap (a few GPU minutes); re-run with --force on an idle GPU to replace provisional latency.
+    ctx.run_stage("measure", lambda: measure.measure(ctx.profile))
 
 
 @command("report", help="results.csv -> LaTeX tables, macros and figures (spec §9)")
