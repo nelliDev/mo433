@@ -16,7 +16,7 @@ def test_flops_of_linear_layer_match_analytic_count():
 def test_student_costs_match_spec():
     # spec §4.2 params; MACs from the analytic counts in docs/student-design/debate/residual.md
     rows = {r["encoder_id"]: r for r in measure.architecture_costs(sizes=("S", "L"), teacher=False)}
-    s, l = rows["ResNet96-S"], rows["ResNet96-L"]
+    s, l = rows["S"], rows["L"]
     assert round(s["params"] / 1e6, 2) == 1.57 and round(l["params"] / 1e6, 2) == 6.28
     assert s["macs"] / 1e6 == pytest.approx(177, abs=2)
     assert l["macs"] / 1e6 == pytest.approx(704, abs=3)
@@ -82,10 +82,10 @@ def test_measure_stage_writes_cost_tables(mo433_root, monkeypatch):
     measure.measure(teacher=False, timed=2, warmup=1)
 
     costs = list(csv.DictReader(open(mo433_root / "results/costs.csv")))
-    assert [r["encoder_id"] for r in costs] == ["ResNet96-S", "ResNet96-L"]
-    assert {"params", "macs", "flops", "feature_dim", "gpu_latency_ms_mean", "gpu_latency_ms_sd",
-            "cpu_latency_ms_mean", "provisional"} <= set(costs[0])
-    assert float(costs[0]["cpu_latency_ms_mean"]) > 0
+    assert [r["encoder_id"] for r in costs] == ["S", "L"]
+    assert {"params", "macs", "flops", "feature_dim", "gpu_latency_ms", "gpu_latency_ms_sd",
+            "cpu_latency_ms", "provisional"} <= set(costs[0])
+    assert float(costs[0]["cpu_latency_ms"]) > 0
     if torch.cuda.is_available():
         assert costs[0]["provisional"] == "True" and "999 trainer" in costs[0]["gpu_other_processes"]
     runs = list(csv.DictReader(open(mo433_root / "results/runs_cost.csv")))
@@ -93,6 +93,25 @@ def test_measure_stage_writes_cost_tables(mo433_root, monkeypatch):
     summary = json.loads((mo433_root / "results/costs_summary.json").read_text())
     assert summary["teacher_pretrain_gpu_h_estimate"] == 3100
     assert summary["teacher_cache_gpu_h"] == 0.1
+
+
+def test_report_reads_measure_outputs(mo433_root, monkeypatch):
+    from mo433 import report
+
+    _write_json(mo433_root / "runs/B-S-100-s0/summary.json", {"wall_seconds": 7200, "gpu_seconds": 3600})
+    _write_json(mo433_root / "runs/C-S-100-s0/summary.json", {"wall_seconds": 3600, "gpu_seconds": 3600})
+    _write_json(mo433_root / "teacher/cache_timing.json", {"gpu_seconds": 360})
+    monkeypatch.setattr(measure, "query_gpu_processes", lambda: [])
+
+    measure.measure(teacher=False, timed=2, warmup=1)
+
+    costs = report.read_costs(mo433_root / "results/costs.csv")
+    assert set(costs) == {"S", "L"}
+    assert round(costs["S"]["params"] / 1e6, 2) == 1.57 and costs["L"]["feature_dim"] == 384
+    assert costs["S"]["macs"] * 2 == costs["S"]["flops"] and costs["S"]["cpu_latency_ms"] > 0
+    runs = report.read_runs_cost(mo433_root / "results/runs_cost.csv")
+    assert runs["B-S-100-s0"] == {"wall_h": 2.0, "gpu_h": 1.0, "teacher_cache_gpu_h_charged": 0.0}
+    assert runs["C-S-100-s0"] == {"wall_h": 1.0, "gpu_h": 1.0, "teacher_cache_gpu_h_charged": 0.1}
 
 
 def test_cli_measure_runs_as_a_stage(mo433_root, monkeypatch):
