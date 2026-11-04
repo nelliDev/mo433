@@ -1,11 +1,14 @@
 """Config seam: YAML files -> frozen, validated Config objects."""
 
 import dataclasses
+import json
+import re
 from pathlib import Path
 
 import pytest
 
 from mo433.config import load_config, run_id
+from mo433.paths import REPO_ROOT
 
 
 def test_row_size_config_has_spec_budget():
@@ -14,9 +17,13 @@ def test_row_size_config_has_spec_budget():
     assert (cfg.n_images, cfg.k_views, cfg.epochs, cfg.batch_size) == (100_000, 20, 100, 256)
     assert cfg.student_width == 24
     assert cfg.head_width == 2048
-    assert cfg.optimizer.lr == 1e-3
-    assert cfg.optimizer.weight_decay == 0.05
-    assert cfg.optimizer.warmup_epochs == 2
+    # The optimizer is the committed Optuna winner once `tune optuna --apply` ran, else the fallback.
+    summary = REPO_ROOT / "tuning" / "optuna_b.json"
+    expected = (json.loads(summary.read_text())["winner"]["params"] if summary.exists()
+                else {"lr": 1e-3, "weight_decay": 0.05, "warmup_epochs": 2})
+    assert cfg.optimizer.lr == pytest.approx(expected["lr"])
+    assert cfg.optimizer.weight_decay == pytest.approx(expected["weight_decay"])
+    assert cfg.optimizer.warmup_epochs == expected["warmup_epochs"]
     assert cfg.optimizer.betas == (0.9, 0.999)
     assert cfg.probe.linear_c is None and cfg.probe.rbf_c is None and cfg.probe.rbf_gamma is None
 
@@ -69,7 +76,8 @@ def test_unknown_keys_fail_loudly(tmp_path, file, extra):
 
 def test_float_written_without_dot_is_rejected(tmp_path):
     configs = _copy_configs(tmp_path)
-    text = (configs / "base.yaml").read_text().replace("lr: 1.0e-3", "lr: 1e-3")
+    text = (configs / "base.yaml").read_text()
+    text = re.sub(r"(?m)^(\s*lr:).*$", r"\1 1e-3", text, count=1)  # PyYAML reads 1e-3 as a string
     (configs / "base.yaml").write_text(text)
     with pytest.raises(ValueError, match="optimizer.lr"):
         load_config(configs_dir=configs)

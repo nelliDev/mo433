@@ -80,10 +80,8 @@ def test_smoke_optuna_completes_and_resumes(tiny_pool, mo433_root):
     summary = tune.run_optuna(profile="smoke", n_trials=2, epochs=1, overrides=TINY)
 
     assert [t["state"] for t in summary["trials"]] == ["COMPLETE", "COMPLETE"]
-    fallback = config_mod.load_config("B", "S").optimizer  # trial 0 = the smoke config = the fallback
-    assert summary["trials"][0]["params"] == {
-        "lr": fallback.lr, "weight_decay": fallback.weight_decay, "warmup_epochs": fallback.warmup_epochs,
-    }
+    # trial 0 = the smoke config = the fallback, pinned by spec §6.1 (base.yaml holds the winner after --apply)
+    assert summary["trials"][0]["params"] == {"lr": 1e-3, "weight_decay": 0.05, "warmup_epochs": 2}
     assert all(0.0 <= t["value"] <= 1.0 for t in summary["trials"])
     assert summary["winner"]["number"] in (0, 1)
     assert json.loads((mo433_root / "tuning" / "optuna_b.json").read_text())["winner"] == summary["winner"]
