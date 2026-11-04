@@ -339,7 +339,8 @@ def _report_args(p: argparse.ArgumentParser) -> None:
         "--repo-root",
         default=None,
         metavar="DIR",
-        help="where the committed inputs (results.csv, report/data/) and outputs (report/) live; default: this repo",
+        help="where the committed inputs (results.csv, report/data/) and outputs (report/) live; default: this repo "
+        "(smoke profile: $MO433_ROOT/report-repo, so smoke never overwrites committed files)",
     )
     p.add_argument(
         "--no-sync",

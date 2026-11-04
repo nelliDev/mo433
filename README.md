@@ -56,6 +56,8 @@ The code loads it with `torchvision.datasets.STL10(<data root>, download=False)`
 | `MO433_ROOT` | artifact root (pool, teacher cache, runs, features, results) | `artifacts/` (`artifacts-smoke/` with `--profile smoke`) |
 | `MO433_POOL` | view-pool directory; put it on a `chattr +C` directory (≈55 GB memmap) | `$MO433_ROOT/pool` |
 | `MO433_DATA` | directory that contains `stl10_binary/` | `data/` |
+| `MO433_NUM_WORKERS` | data-loader workers for `pool` and training runs (cap it on a shared machine) | 14 (`pool`), 8 (training) |
+| `MO433_N_JOBS` | joblib workers for probes and diagnostics | 6 |
 
 ## Reproducing every table and figure
 
@@ -67,9 +69,17 @@ minutes and is the pre-flight check before every long run.
 Everything in one command, from the frozen configs (git tag `configs-frozen`):
 
 ```bash
-uv run mo433 all                     # splits -> pool -> teacher -> train-all -> extract -> probe -> diagnose -> measure -> report
+uv run mo433 all                     # splits -> invariants -> pool -> teacher -> train-all -> extract -> probe -> diagnose -> measure -> report
 uv run mo433 --profile smoke all     # the same, smoke-sized
 ```
+
+`invariants` runs the spec §9 invariant tests (`pytest -m invariant`) before any GPU stage.
+SVM C/gamma: the full `all` probes only with the frozen values in `configs/base.yaml`. While
+they are null it stops after `extract` and says so: run `mo433 probe --select-svm`
+(5-fold CV on B-S-100-s0), commit `configs/base.yaml`, rerun `mo433 all` (finished
+stages are skipped). The smoke `all` probes and diagnoses with the provisional SVM settings
+(`--provisional-svm`) and only one encoder per row (`A-S-s0`, `B-S-100-s0`, `C-S-100-s0`,
+`D`); its report goes to `$MO433_ROOT/report-repo/`, never to the committed files.
 
 Or stage by stage:
 
@@ -79,8 +89,9 @@ uv run mo433 splits                  # committed index files under splits/ (labe
 uv run mo433 pool                    # K = 20 view pool memmap (spec §3)
 uv run mo433 teacher                 # teacher sanity check vs 74.5% k-NN + teacher-feature cache
 
-# the 20 reported runs (spec §8), in week-3 order ...
-uv run mo433 train-all
+# the 20 reported runs (spec §8), in week-3 order, each extracted as it lands ...
+uv run mo433 train-all --dry-list    # print the order with done/todo
+uv run mo433 train-all               # (--only S|L for one size; a diverged run is skipped and reported)
 # ... or one at a time
 uv run mo433 train --row B --size S --frac 100 --seed 0
 uv run mo433 train --row C --size L --frac 50 --seed 1
@@ -99,6 +110,12 @@ cd report && latexmk -pdf main.tex   # optional: compile the skeleton with every
 
 Tuning studies are opt-in (`uv run mo433 tune {optuna,grid,fixed-view,lars}`); their study
 databases and summaries are committed.
+
+The week-1 dry run (`uv run mo433 tune dryrun`, spec §8, §10) trains B-S and C-S for 5 epochs
+at full scale (N = 100k, K = 20) with the current configs, under `$MO433_ROOT/tuning/dryrun/`.
+It reports the overhead factor (wall time / summed GPU step time) per run and overall, the
+loader-wait share, a projection of the 20 runs' GPU- and wall-hours, and a verdict against
+the 1.3× slip-rule threshold, and writes `tuning/dryrun.json`. Run it on an idle GPU.
 
 ### What `mo433 report` produces
 
