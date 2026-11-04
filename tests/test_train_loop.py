@@ -10,6 +10,7 @@ import pytest
 import torch
 
 from mo433 import paths
+from mo433.config import load_config
 from mo433.train import train_run
 
 TINY = dict(
@@ -47,7 +48,7 @@ def test_smoke_run_completes_and_writes_the_run_directory(tiny_pool):
         p.name for p in rd.iterdir()
     }
     cfg = json.loads((rd / "config.json").read_text())
-    assert cfg["run_id"] == "B-S-100-s0" and cfg["settings"]["lr"] == 1e-3 and cfg["settings"]["head_width"] == 32
+    assert cfg["run_id"] == "B-S-100-s0" and cfg["settings"]["lr"] == load_config("B", "S", "smoke").optimizer.lr and cfg["settings"]["head_width"] == 32
     assert "git_commit" in cfg and "git_dirty" in cfg
 
     log = _jsonl(rd / "metrics.jsonl")
