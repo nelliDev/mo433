@@ -1,0 +1,199 @@
+{
+  "runs": [
+    {
+      "run_id": "B-S-100-s0",
+      "row": "B",
+      "size": "S",
+      "epochs": 5,
+      "n_used": 100000,
+      "wall_seconds": 245.696,
+      "gpu_seconds": 228.728,
+      "overhead": 1.0741841838340735,
+      "epoch_overhead": 1.00562239865692,
+      "loader_wait_frac": 0.007354789708452529,
+      "knn_seconds": 9.817,
+      "other_seconds": 5.864999999999988,
+      "gpu_seconds_per_epoch": 45.216499999999996,
+      "peak_mem_gb": 1.508
+    },
+    {
+      "run_id": "C-S-100-s0",
+      "row": "C",
+      "size": "S",
+      "epochs": 5,
+      "n_used": 100000,
+      "wall_seconds": 102.268,
+      "gpu_seconds": 88.494,
+      "overhead": 1.155648970551676,
+      "epoch_overhead": 1.0105995886726782,
+      "loader_wait_frac": 0.01725769635029967,
+      "knn_seconds": 1.312,
+      "other_seconds": 11.524000000000013,
+      "gpu_seconds_per_epoch": 17.8265,
+      "peak_mem_gb": 2.245
+    }
+  ],
+  "overall_overhead": 1.0969100503748164,
+  "overall_loader_wait_frac": 0.010127204284918265,
+  "threshold": 1.3,
+  "exceeds_threshold": false,
+  "verdict": "overhead 1.10x <= 1.3x: within the spec \u00a78 budget; no early slip decision",
+  "amortized_overhead": {
+    "B-S-100-s0": 1.0498244639921652,
+    "C-S-100-s0": 1.0319366284719869
+  },
+  "projection": {
+    "epochs": 100,
+    "n_images": 100000,
+    "overhead": 1.0969100503748164,
+    "gpu_hours": 21.056362,
+    "wall_hours": 23.09693510213037,
+    "spec_gpu_hours": 18.7,
+    "spec_wall_hours": 24.0,
+    "l_source": "S x 2.508",
+    "longest_run": {
+      "run_id": "B-L-100-s0",
+      "gpu_hours": 3.1500828333333333,
+      "wall_hours": 3.4553575193965105,
+      "source": "S x 2.508"
+    },
+    "runs": [
+      {
+        "run_id": "B-S-100-s0",
+        "gpu_hours": 1.2560138888888888,
+        "wall_hours": 1.37773425813258,
+        "source": "measured"
+      },
+      {
+        "run_id": "C-S-100-s0",
+        "gpu_hours": 0.4951805555555555,
+        "wall_hours": 0.543168528139074,
+        "source": "measured"
+      },
+      {
+        "run_id": "B-S-100-s1",
+        "gpu_hours": 1.2560138888888888,
+        "wall_hours": 1.37773425813258,
+        "source": "measured"
+      },
+      {
+        "run_id": "C-S-100-s1",
+        "gpu_hours": 0.4951805555555555,
+        "wall_hours": 0.543168528139074,
+        "source": "measured"
+      },
+      {
+        "run_id": "B-S-100-s2",
+        "gpu_hours": 1.2560138888888888,
+        "wall_hours": 1.37773425813258,
+        "source": "measured"
+      },
+      {
+        "run_id": "C-S-100-s2",
+        "gpu_hours": 0.4951805555555555,
+        "wall_hours": 0.543168528139074,
+        "source": "measured"
+      },
+      {
+        "run_id": "B-L-100-s0",
+        "gpu_hours": 3.1500828333333333,
+        "wall_hours": 3.4553575193965105,
+        "source": "S x 2.508"
+      },
+      {
+        "run_id": "C-L-100-s0",
+        "gpu_hours": 1.2419128333333334,
+        "wall_hours": 1.3622666685727975,
+        "source": "S x 2.508"
+      },
+      {
+        "run_id": "B-L-100-s1",
+        "gpu_hours": 3.1500828333333333,
+        "wall_hours": 3.4553575193965105,
+        "source": "S x 2.508"
+      },
+      {
+        "run_id": "C-L-100-s1",
+        "gpu_hours": 1.2419128333333334,
+        "wall_hours": 1.3622666685727975,
+        "source": "S x 2.508"
+      },
+      {
+        "run_id": "B-S-050-s0",
+        "gpu_hours": 0.6280069444444444,
+        "wall_hours": 0.68886712906629,
+        "source": "measured"
+      },
+      {
+        "run_id": "C-S-050-s0",
+        "gpu_hours": 0.24759027777777776,
+        "wall_hours": 0.271584264069537,
+        "source": "measured"
+      },
+      {
+        "run_id": "B-S-050-s1",
+        "gpu_hours": 0.6280069444444444,
+        "wall_hours": 0.68886712906629,
+        "source": "measured"
+      },
+      {
+        "run_id": "C-S-050-s1",
+        "gpu_hours": 0.24759027777777776,
+        "wall_hours": 0.271584264069537,
+        "source": "measured"
+      },
+      {
+        "run_id": "B-S-050-s2",
+        "gpu_hours": 0.6280069444444444,
+        "wall_hours": 0.68886712906629,
+        "source": "measured"
+      },
+      {
+        "run_id": "C-S-050-s2",
+        "gpu_hours": 0.24759027777777776,
+        "wall_hours": 0.271584264069537,
+        "source": "measured"
+      },
+      {
+        "run_id": "B-L-050-s0",
+        "gpu_hours": 1.5750414166666666,
+        "wall_hours": 1.7276787596982552,
+        "source": "S x 2.508"
+      },
+      {
+        "run_id": "C-L-050-s0",
+        "gpu_hours": 0.6209564166666667,
+        "wall_hours": 0.6811333342863988,
+        "source": "S x 2.508"
+      },
+      {
+        "run_id": "B-L-050-s1",
+        "gpu_hours": 1.5750414166666666,
+        "wall_hours": 1.7276787596982552,
+        "source": "S x 2.508"
+      },
+      {
+        "run_id": "C-L-050-s1",
+        "gpu_hours": 0.6209564166666667,
+        "wall_hours": 0.6811333342863988,
+        "source": "S x 2.508"
+      }
+    ]
+  },
+  "profile": "full",
+  "dryrun_epochs": 5,
+  "optimizer": {
+    "name": "adamw",
+    "lr": 0.0028558776451619457,
+    "weight_decay": 0.10957948710049177,
+    "warmup_epochs": 2,
+    "betas": [
+      0.9,
+      0.999
+    ]
+  },
+  "overrides": {
+    "num_workers": 6
+  },
+  "gpu": "NVIDIA GeForce RTX 3060 Laptop GPU"
+}
