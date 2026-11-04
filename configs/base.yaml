@@ -9,8 +9,8 @@ head_width: 2048    # B expander / C projector hidden width; tuning grid may ove
 
 optimizer:          # fallback until the Optuna study (spec §6.1) fills the winner
   name: adamw
-  lr: 1.0e-3
-  weight_decay: 0.05
+  lr: 0.0028558776451619457
+  weight_decay: 0.10957948710049177
   warmup_epochs: 2
   betas: [0.9, 0.999]
 
