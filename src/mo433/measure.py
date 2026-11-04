@@ -47,8 +47,8 @@ Outputs, under ``results_dir(profile)`` (``$MO433_ROOT/results/``):
     teacher_cache_gpu_h   the one-off cache cost (amortized view: count it once per study)
     run_gpu_h_by_row, n_runs, n_c_runs, any_provisional, gpu_name, torch, measured_at
 
-The teacher-cache GPU time is any JSON object with a ``gpu_seconds`` key under
-``teacher_dir`` (files named ``*cache*`` first). Missing run dirs or cache just omit rows /
+The teacher-cache GPU time comes from ``teacher_dir/cache.json`` (``gpu_seconds`` or
+``gpu_hours``; other JSON under teacher_dir as a fallback). Missing run dirs or cache omit rows /
 leave the value empty. The stage is cheap (a few GPU minutes): re-run it with
 ``mo433 measure --force`` on an idle GPU to replace provisional latencies.
 """
@@ -185,6 +185,10 @@ def other_gpu_processes(smi_csv: str, own_pid: int) -> list[str]:
     return out
 
 
+def gpu_name() -> str:
+    return torch.cuda.get_device_name(0)
+
+
 def query_gpu_processes() -> list[str] | None:
     """Other CUDA compute processes on the GPU right now; None if nvidia-smi fails."""
     try:
@@ -214,17 +218,19 @@ def _read_json(path: Path) -> dict | None:
 def teacher_cache_gpu_seconds(profile: str = "full") -> float | None:
     """GPU seconds of the one-off teacher-feature cache, or None if no record exists.
 
-    Looks for a JSON object with a ``gpu_seconds`` key under ``teacher_dir`` (files whose
-    name contains "cache" first), so it does not depend on the exact file name #18 picks.
+    Reads ``teacher_dir/cache.json`` (written by ``mo433 teacher``), falling back to any
+    other JSON there; takes ``gpu_seconds``, else ``gpu_hours`` × 3600.
     """
     tdir = paths.teacher_dir(profile)
     if not tdir.is_dir():
         return None
-    files = sorted(tdir.rglob("*.json"), key=lambda p: ("cache" not in p.name, len(p.parts), str(p)))
+    files = sorted(tdir.rglob("*.json"), key=lambda p: (p.name != "cache.json", "cache" not in p.name, str(p)))
     for f in files:
-        obj = _read_json(f)
-        if obj and isinstance(obj.get("gpu_seconds"), int | float):
+        obj = _read_json(f) or {}
+        if isinstance(obj.get("gpu_seconds"), int | float):
             return float(obj["gpu_seconds"])
+        if isinstance(obj.get("gpu_hours"), int | float):
+            return float(obj["gpu_hours"]) * 3600
     return None
 
 
@@ -279,22 +285,12 @@ def run_costs(profile: str = "full") -> list[dict]:
     return out
 
 
-TIMM_TEACHER ="vit_small_patch16_224.dino"
-
-
 def load_teacher() -> nn.Module:
-    """The row-D network that takes a 224 px normalized input.
-
-    Uses ``load_encoder("D")`` once the teacher module registers it (#18); until then builds
-    the same timm model directly (spec §4.1). Either way the module is frozen and in eval.
-    """
+    """The row-D encoder (frozen, eval). Its ``forward`` takes the 224 px normalized input;
+    the 96->224 resize in ``preprocess`` is not counted or timed."""
     from mo433 import encoders
 
-    if encoders.is_registered("D"):
-        return encoders.load_encoder("D")
-    import timm
-
-    return timm.create_model(TIMM_TEACHER, pretrained=True, num_classes=0).eval().requires_grad_(False)
+    return encoders.load_encoder("D")
 
 
 # ---------------------------------------------------------------- the stage
@@ -318,12 +314,13 @@ def measure(
     warmup: int = 10,
     timed: int = 100,
     log=print,
+    cuda: bool | None = None,
 ) -> dict:
     """Write ``costs.csv``, ``runs_cost.csv`` and ``costs_summary.json`` under ``results_dir``."""
     out_dir = paths.results_dir(profile)
     out_dir.mkdir(parents=True, exist_ok=True)
-    cuda = torch.cuda.is_available()
-    gpu_name = torch.cuda.get_device_name(0) if cuda else None
+    cuda = torch.cuda.is_available() if cuda is None else cuda
+    device_name = gpu_name() if cuda else None
     stamp = time.strftime("%Y-%m-%dT%H:%M:%S%z")
 
     rows = []
@@ -355,7 +352,7 @@ def measure(
             "cpu_threads": CPU_THREADS,
             "cpu_latency_ms": _r(cpu[0]),
             "cpu_latency_ms_sd": _r(cpu[1]),
-            "gpu_name": gpu_name,
+            "gpu_name": device_name,
             "gpu_other_processes": "; ".join(others),
             "cpu_load1": _r(load, 2),
             "provisional": bool(reasons),
@@ -380,7 +377,7 @@ def measure(
         by_row[r["row"] or "other"] = by_row.get(r["row"] or "other", 0.0) + r["gpu_h"]
     summary = {
         "measured_at": stamp,
-        "gpu_name": gpu_name,
+        "gpu_name": device_name,
         "torch": torch.__version__,
         "teacher_pretrain_gpu_h_estimate": TEACHER_PRETRAIN_GPU_H_ESTIMATE,
         "teacher_pretrain_note": "estimate: DINO ViT-S/16 1.16k GPU-h @300 ep (Table 8) x 800/300 (spec §4.1)",
