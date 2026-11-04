@@ -174,7 +174,7 @@ def _global_args(p: argparse.ArgumentParser, *, suppress: bool) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="mo433", description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(prog="mo433", description="MO433 distillation study pipeline (docs/SPEC.md)")
     _global_args(parser, suppress=False)
     sub = parser.add_subparsers(dest="command", required=True, metavar="<subcommand>")
     for cmd in COMMANDS.values():
