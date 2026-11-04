@@ -65,7 +65,9 @@ def _splits(ctx: Context, args: argparse.Namespace) -> None:
 
 @command("pool", help="write the K-view pool memmap (spec §3)")
 def _pool(ctx: Context, args: argparse.Namespace) -> None:
-    raise NotImplementedError("pool")
+    from mo433 import pool
+
+    pool.run(profile=ctx.profile, force=ctx.force)
 
 
 @command("teacher", help="teacher sanity check and teacher-feature cache (spec §3, §4.1)")
