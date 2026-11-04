@@ -125,7 +125,7 @@ def _eval_args(p: argparse.ArgumentParser) -> None:
         help="while probe C/gamma are null in config, run SVMs with C=1 / C=10,gamma=scale "
         "(rows marked svm_params_frozen=False) instead of k-NN only",
     )
-    p.add_argument("--n-jobs", type=int, default=16)
+    p.add_argument("--n-jobs", type=int, default=None, help="joblib workers (default: $MO433_N_JOBS or 6)")
 
 
 def _probe_args(p: argparse.ArgumentParser) -> None:
@@ -200,7 +200,7 @@ def _extract(ctx: Context, args: argparse.Namespace) -> None:
 def _probe(ctx: Context, args: argparse.Namespace) -> None:
     from mo433 import probe
 
-    n_jobs = getattr(args, "n_jobs", 16)
+    n_jobs = getattr(args, "n_jobs", None) or probe.N_JOBS
     if args.select_svm:
         encoders = getattr(args, "encoder", None) or [probe.SELECTION_ENCODER]
         if len(encoders) != 1:
@@ -235,7 +235,7 @@ def _probe(ctx: Context, args: argparse.Namespace) -> None:
 
 @command("diagnose", help="collapse check and characterization (spec §7.3)", add_args=_diagnose_args)
 def _diagnose(ctx: Context, args: argparse.Namespace) -> None:
-    from mo433 import diagnostics
+    from mo433 import diagnostics, probe
 
     svm = _svm(ctx, args)
     for eid in _encoders(ctx, args):
@@ -247,7 +247,7 @@ def _diagnose(ctx: Context, args: argparse.Namespace) -> None:
                 svm=svm,
                 anchor=getattr(args, "anchor", None),
                 tsne=not getattr(args, "no_tsne", False),
-                n_jobs=getattr(args, "n_jobs", 16),
+                n_jobs=getattr(args, "n_jobs", None) or probe.N_JOBS,
             )
             check = rec.get("teacher_check") or rec.get("collapse_check")
             verdict = "n/a (row A)" if check is None else (

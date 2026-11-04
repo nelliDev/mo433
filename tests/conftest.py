@@ -1,4 +1,8 @@
+import os
 from pathlib import Path
+
+# Cap joblib workers before mo433.probe reads it: 16 workers per pytest run OOM-killed the laptop.
+os.environ.setdefault("MO433_N_JOBS", "2")
 
 import pytest
 

@@ -42,6 +42,8 @@ from mo433 import paths, splits
 PROBES = ("knn", "linear_svm", "rbf_svm")
 FEATURE_SETS = ("main", "ms_concat", "ms_randproj")
 K_MAX = 20
+# joblib workers each hold ~600 MB; 16 of them per pytest run OOM-killed the 15 GB laptop.
+N_JOBS = int(os.environ.get("MO433_N_JOBS", "6"))
 
 RESULTS_COLUMNS = (
     "encoder_id",  # e.g. A-S-s0, B-S-100-s0, D
@@ -158,7 +160,7 @@ def probe_features(
     train_key: str = "train_x",
     test_key: str = "test_x",
     splits_dir: Path | None = None,
-    n_jobs: int = 16,
+    n_jobs: int = N_JOBS,
 ) -> list[dict]:
     """Every probe on every label subset -> result rows (see ``RESULTS_COLUMNS``).
 
@@ -285,7 +287,7 @@ def cv_select(
     *,
     linear_grid=LINEAR_C_GRID,
     rbf_grid=RBF_GRID,
-    n_jobs: int = 16,
+    n_jobs: int = N_JOBS,
 ) -> dict:
     """5-fold CV (the committed folds) over both grids; the best mean accuracy wins.
 
@@ -381,7 +383,7 @@ def probe_encoder(
     *,
     profile: str = "full",
     splits_dir: Path | None = None,
-    n_jobs: int = 16,
+    n_jobs: int = N_JOBS,
 ) -> list[dict]:
     """Probe ``features/<encoder_id>.npz`` (main feature set) and upsert into ``results.csv``."""
     rows = probe_features(
@@ -397,7 +399,7 @@ def select_svm(
     profile: str = "full",
     configs_dir: Path | None = None,
     splits_dir: Path | None = None,
-    n_jobs: int = 16,
+    n_jobs: int = N_JOBS,
     linear_grid=LINEAR_C_GRID,
     rbf_grid=RBF_GRID,
 ) -> dict:
