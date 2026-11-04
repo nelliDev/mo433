@@ -90,6 +90,21 @@ def test_different_seed_gives_different_views(tmp_path):
     assert not np.array_equal(pool.open_pool(tmp_path / "a")[0], pool.open_pool(tmp_path / "b")[0])
 
 
+def test_cli_pool_builds_the_profile_pool_once(mo433_root, monkeypatch):
+    from mo433.cli import main
+
+    calls = []
+    monkeypatch.setattr(pool, "build_pool", lambda out, **kw: calls.append((out, kw)))
+    assert main(["--profile", "smoke", "pool"]) == 0
+    assert main(["--profile", "smoke", "pool"]) == 0  # .done marker: skipped
+    assert len(calls) == 1
+    out, kw = calls[0]
+    assert out == mo433_root / "pool"
+    assert (kw["n_images"], kw["k_views"]) == (2000, 2)
+    assert main(["--profile", "smoke", "--force", "pool"]) == 0
+    assert len(calls) == 2
+
+
 def test_complete_pool_is_not_rebuilt(tmp_path):
     _build(tmp_path / "p", n=2, k=2)
     mtime = (tmp_path / "p" / "views.npy").stat().st_mtime_ns
