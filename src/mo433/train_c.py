@@ -54,7 +54,10 @@ def load_teacher(profile: str, n_used: int, k_views: int, device: str) -> torch.
     """Rows ``[0, n_used)`` of the teacher cache as a fp16 tensor ``[n_used, K, 384]`` on ``device``.
 
     The whole used slice lives on the GPU (1.47 GiB at N=100k, K=20; half for the 50% runs),
-    so the per-step lookup is a device gather with no host work. It is copied in chunks so
+    so the per-step lookup is a device gather with no host work and the shared loop needs no
+    hook. Measured on the 3060 (#20): 43 µs/step for the GPU gather vs 67 µs for a pinned-CPU
+    gather + non_blocking copy, both negligible next to a ~50–100 ms C step; the resident cache
+    puts C-S peak at 2.6 GB and C-L at 2.7 GB, within the 6 GB card. It is copied in chunks so
     host RAM never holds more than one chunk. The cache must match the pool the run reads:
     shape-checked always, and the pool metadata recorded in ``cache.json`` is compared with
     the pool's ``meta.json`` when both exist (a rebuilt pool makes the cache stale).
