@@ -86,3 +86,17 @@ def test_val_knn_encoder_leaves_parameters_buffers_and_mode_unchanged(tmp_path):
     after = enc.state_dict()
     for k, v in before.items():
         assert torch.equal(v, after[k]), k  # BN running stats too: eval() was used
+
+
+def test_val_knn_encoder_on_a_resnet96_student_leaves_it_unchanged(tmp_path):
+    from mo433.students import build_student
+
+    net = build_student("S", 0).train()
+    before = {k: v.clone() for k, v in net.state_dict().items()}
+    images = torch.randint(0, 256, (60, 96, 96, 3), dtype=torch.uint8)
+    _val_bank(60, tmp_path)
+
+    knn.val_knn_encoder(net, images, np.arange(60) % 3, splits_dir=tmp_path, batch_size=32)
+
+    assert net.training
+    assert all(torch.equal(v, net.state_dict()[k]) for k, v in before.items())
