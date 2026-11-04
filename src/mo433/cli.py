@@ -322,11 +322,20 @@ TUNE_STUDIES = ("optuna", "grid", "fixed-view", "lars")
 
 def _tune_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("study", choices=TUNE_STUDIES)
+    p.add_argument("--n-trials", type=int, default=None, help="optuna: finished trials to reach (default 16; smoke 2)")
+    p.add_argument("--epochs", type=int, default=None, help="epochs per trial (default: spec value; smoke: profile epochs)")
+    p.add_argument("--rows", nargs="+", choices=config_mod.ROWS, default=None, help="grid: rows (default B C)")
+    p.add_argument("--apply", action="store_true",
+                   help="write the study's winner into configs/ (optuna: base.yaml optimizer; grid: per-row head_width) "
+                        "instead of running it; does not tag configs-frozen")
 
 
 @command("tune", help="opt-in tuning studies (spec §6)", add_args=_tune_args)
 def _tune(ctx: Context, args: argparse.Namespace) -> None:
-    raise NotImplementedError(f"tune {args.study}")
+    from mo433 import tune
+
+    tune.run_cli(args.study, profile=ctx.profile, n_trials=args.n_trials, epochs=args.epochs,
+                 rows=args.rows, apply=args.apply, force=ctx.force)
 
 
 # ---------------------------------------------------------------- everything
