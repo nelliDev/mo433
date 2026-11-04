@@ -9,7 +9,6 @@ CLS token after the final LayerNorm), cast ``.float()``.
 
 from __future__ import annotations
 
-import json
 import os
 import queue
 import threading
@@ -201,24 +200,11 @@ def build_cache(
     }
 
 
-def _open_pool(profile: str) -> tuple[np.ndarray, dict]:
-    """The finished view pool and its metadata (``mo433.pool.open_pool`` once #17 is merged)."""
-    from mo433 import pool
-
-    if hasattr(pool, "open_pool"):
-        return pool.open_pool(paths.pool_dir(profile))
-    pool_dir = paths.pool_dir(profile)
-    meta_path = pool_dir / "meta.json"
-    if not meta_path.exists():
-        raise FileNotFoundError(f"no finished pool in {pool_dir} (run `mo433 pool`)")
-    return np.load(pool_dir / "views.npy", mmap_mode="r"), json.loads(meta_path.read_text())
-
-
 def build_teacher_cache(profile: str = "full", device: str | None = None, log: Callable[[str], None] = print) -> Path:
     """Stage body of ``mo433 teacher``: cache every pool view, write ``cache.json``."""
-    from mo433 import stages
+    from mo433 import pool, stages
 
-    views, pool_meta = _open_pool(profile)
+    views, pool_meta = pool.open_pool(paths.pool_dir(profile))
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     enc = teacher_encoder().to(device)
     out = cache_path(profile)
@@ -238,98 +224,36 @@ def build_teacher_cache(profile: str = "full", device: str | None = None, log: C
 
 # ---------------------------------------------------------------- sanity check (spec §4.1, §7.3)
 #
-# On the validation split (queries = val 500, bank = the other 4.5k labeled-train images):
-# k-NN (k = 20, cosine), spread = mean per-dim std of L2-normalized embeddings x sqrt(d),
-# k-means (k = 10) NMI on L2-normalized embeddings. Pass: k-NN >= 74.5% - 5 pts, spread > 0.3,
-# NMI > 0.1 (the thresholds of ``mo433.diagnostics.teacher_check``). ``test_knn_100`` is the
-# k-NN (k = 20, cosine) of the test split against all 5k labeled-train images, for comparison
-# with the published 74.5%.
+# ``mo433.diagnostics.collapse_stats`` on the validation split (val k-NN k=20 cosine, spread,
+# k-means NMI) judged by ``diagnostics.teacher_check`` (k-NN >= 74.5% - 5 pts, spread > 0.3,
+# NMI > 0.1). Added here: ``test_knn_100``, the same k-NN of the test split against all 5k
+# labeled-train images, for comparison with the published 74.5% (an ImageNet number).
+# Written to ``teacher/sanity.json``; ``results/diagnostics/D.json`` is ``mo433 diagnose``'s.
 
-REFERENCE_KNN = 0.745
-KNN_TOLERANCE = 0.05
-SPREAD_MIN = 0.3
-NMI_MIN = 0.1
-K_NN = 20
-
-
-def _knn_accuracy(bank_x, bank_y, query_x, query_y, k: int = K_NN) -> float:
-    """Cosine k-NN, uniform majority vote (ties -> lowest class id)."""
-    bank = F.normalize(torch.as_tensor(np.asarray(bank_x), dtype=torch.float32), dim=1)
-    query = F.normalize(torch.as_tensor(np.asarray(query_x), dtype=torch.float32), dim=1)
-    labels = torch.as_tensor(np.asarray(bank_y), dtype=torch.long)
-    idx = (query @ bank.T).topk(min(k, len(bank)), dim=1).indices
-    pred = F.one_hot(labels[idx], int(labels.max()) + 1).sum(1).argmax(1)
-    return float((pred.numpy() == np.asarray(query_y)).mean())
-
-
-def _l2(x: np.ndarray) -> np.ndarray:
-    x = np.asarray(x, dtype=np.float64)
-    return x / np.maximum(np.linalg.norm(x, axis=1, keepdims=True), 1e-12)
-
-
-def _local_val_stats(train_x: np.ndarray, train_y: np.ndarray, splits_dir: Path | None) -> dict:
-    import warnings
-
-    from sklearn.cluster import KMeans
-    from sklearn.exceptions import ConvergenceWarning
-    from sklearn.metrics import normalized_mutual_info_score
-
-    from mo433 import splits
-
-    val, bank = splits.validation_split(splits_dir)
-    z = _l2(train_x[val])
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", ConvergenceWarning)
-        pred = KMeans(10, n_init=10, random_state=0).fit_predict(z)
-    return {
-        "knn": _knn_accuracy(train_x[bank], train_y[bank], train_x[val], train_y[val]),
-        "spread": float(z.std(axis=0).mean() * np.sqrt(z.shape[1])),
-        "nmi": float(normalized_mutual_info_score(train_y[val], pred)),
-    }
-
-
-def _val_stats(train_x: np.ndarray, train_y: np.ndarray, splits_dir: Path | None) -> dict:
-    """``mo433.diagnostics.collapse_stats`` (#16) when present, else the same statistics locally."""
-    from dataclasses import asdict
-
-    from mo433 import diagnostics
-
-    if hasattr(diagnostics, "collapse_stats"):
-        return {k: float(v) for k, v in asdict(diagnostics.collapse_stats(train_x, train_y, splits_dir)).items()}
-    return _local_val_stats(train_x, train_y, splits_dir)
+SANITY_FILE = "sanity.json"
 
 
 def sanity_record(feats: dict, splits_dir: Path | None = None) -> dict:
     """Teacher sanity check on extracted features (keys ``train_x/train_y/test_x/test_y``)."""
-    train_x, train_y = np.asarray(feats["train_x"]), np.asarray(feats["train_y"])
-    stats = _val_stats(train_x, train_y, splits_dir)
-    thresholds = {"knn_min": REFERENCE_KNN - KNN_TOLERANCE, "spread_min": SPREAD_MIN, "nmi_min": NMI_MIN}
-    reasons = {  # criterion -> True if it failed
-        "knn": stats["knn"] < thresholds["knn_min"],
-        "spread": stats["spread"] <= SPREAD_MIN,
-        "nmi": stats["nmi"] <= NMI_MIN,
-    }
+    from dataclasses import asdict
+
+    from mo433 import diagnostics, knn
+
+    stats = diagnostics.collapse_stats(feats["train_x"], feats["train_y"], splits_dir)
     return {
         "encoder_id": "D",
-        "val_stats": stats,
-        "teacher_check": {
-            "passed": not any(reasons.values()),
-            "reasons": reasons,
-            "reference_knn": REFERENCE_KNN,
-            "thresholds": thresholds,
-        },
-        "test_knn_100": _knn_accuracy(train_x, train_y, feats["test_x"], feats["test_y"]),
-        "protocol": "k-NN k=20 cosine uniform vote; val = splits/val.npy vs other 90%; "
-        "test_knn_100 = test split vs all 5k labeled train",
+        "val_stats": diagnostics._jsonable(asdict(stats)),
+        "teacher_check": diagnostics._jsonable(asdict(diagnostics.teacher_check(stats))),
+        "test_knn_100": knn.knn_accuracy(feats["train_x"], feats["train_y"], feats["test_x"], feats["test_y"]),
     }
 
 
 def sanity_path(profile: str = "full") -> Path:
-    return paths.results_dir(profile) / "diagnostics" / "D.json"
+    return paths.teacher_dir(profile) / SANITY_FILE
 
 
 def run_sanity(profile: str = "full", log: Callable[[str], None] = print) -> dict:
-    """Stage body: sanity check on ``features/D.npz``; writes ``results/diagnostics/D.json``.
+    """Stage body: sanity check on ``features/D.npz``, written to ``teacher/sanity.json``.
     Raises if the teacher fails, so the stage gets no ``.done`` marker."""
     from mo433 import extract, stages
 
@@ -339,7 +263,7 @@ def run_sanity(profile: str = "full", log: Callable[[str], None] = print) -> dic
     stages._write_atomic(sanity_path(profile), record)
     s, c = record["val_stats"], record["teacher_check"]
     log(
-        f"[teacher] sanity: val k-NN {s['knn']:.4f} (ref {REFERENCE_KNN}), test k-NN {record['test_knn_100']:.4f}, "
+        f"[teacher] sanity: val k-NN {s['knn']:.4f} (ref {c['reference_knn']}), test k-NN {record['test_knn_100']:.4f}, "
         f"spread {s['spread']:.3f}, NMI {s['nmi']:.3f} -> {'PASS' if c['passed'] else 'FAIL'}"
     )
     if not c["passed"]:
