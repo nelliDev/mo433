@@ -149,7 +149,7 @@ def is_teacher(encoder_id: str) -> bool:
 # ---------------------------------------------------------------- characterization (test split)
 
 
-def characterize(feats: dict, *, tsne: bool = True, n_jobs: int = 16) -> dict:
+def characterize(feats: dict, *, tsne: bool = True, n_jobs: int = probe.N_JOBS) -> dict:
     """k-means NMI/ARI and t-SNE on the test split after probe preprocessing
     (scaler fitted on the full labeled train set, spec §12.5)."""
     _, test = probe.preprocess(feats["train_x"], feats["test_x"])
@@ -205,7 +205,7 @@ def diagnose_encoder(
     anchor: str | None = None,
     tsne: bool = True,
     splits_dir: Path | None = None,
-    n_jobs: int = 16,
+    n_jobs: int = probe.N_JOBS,
 ) -> dict:
     """Collapse/teacher check, characterization and multi-scale probe for one encoder.
 
