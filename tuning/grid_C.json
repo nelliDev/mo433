@@ -1,0 +1,241 @@
+{
+  "row": "C",
+  "size": "S",
+  "profile": "full",
+  "epochs": 20,
+  "seeds": [
+    0,
+    1
+  ],
+  "widths": [
+    1024,
+    2048,
+    4096
+  ],
+  "optimizer": {
+    "lr": 0.0028558776451619457,
+    "weight_decay": 0.10957948710049177,
+    "warmup_epochs": 2
+  },
+  "optimizer_source": "optuna winner (trial 5)",
+  "score": "fp32 validation k-NN (k=20, cosine) of the final backbone",
+  "spread_definition": "|s0 - s1| (range of the two seeds)",
+  "collapse_rule": "a width with any collapse-flagged (or diverged) seed is ineligible",
+  "points": [
+    {
+      "name": "C-w1024-s0",
+      "width": 1024,
+      "seed": 0,
+      "val_knn": 0.8840000033378601,
+      "collapse_flagged": false,
+      "collapse": {
+        "reasons": {
+          "spread": false,
+          "knn": false,
+          "nmi": false
+        },
+        "stats": {
+          "knn": 0.8840000033378601,
+          "spread": 0.541056579751492,
+          "nmi": 0.6905369925975929
+        },
+        "anchor_id": "A-S-s0",
+        "anchor": {
+          "knn": 0.2879999876022339,
+          "spread": 0.07945002664425328,
+          "nmi": 0.11746108865734213
+        }
+      },
+      "diverged": false,
+      "gpu_seconds": 354.085,
+      "bf16_val_knn_last": 0.8840000629425049
+    },
+    {
+      "name": "C-w1024-s1",
+      "width": 1024,
+      "seed": 1,
+      "val_knn": 0.8960000276565552,
+      "collapse_flagged": false,
+      "collapse": {
+        "reasons": {
+          "spread": false,
+          "knn": false,
+          "nmi": false
+        },
+        "stats": {
+          "knn": 0.8960000276565552,
+          "spread": 0.5304461904716817,
+          "nmi": 0.6744189426596463
+        },
+        "anchor_id": "A-S-s1",
+        "anchor": {
+          "knn": 0.30799999833106995,
+          "spread": 0.09695918442227353,
+          "nmi": 0.12657960925391723
+        }
+      },
+      "diverged": false,
+      "gpu_seconds": 356.963,
+      "bf16_val_knn_last": 0.8980000615119934
+    },
+    {
+      "name": "C-w2048-s0",
+      "width": 2048,
+      "seed": 0,
+      "val_knn": 0.8999999761581421,
+      "collapse_flagged": false,
+      "collapse": {
+        "reasons": {
+          "spread": false,
+          "knn": false,
+          "nmi": false
+        },
+        "stats": {
+          "knn": 0.8999999761581421,
+          "spread": 0.5224273849170312,
+          "nmi": 0.642144336937965
+        },
+        "anchor_id": "A-S-s0",
+        "anchor": {
+          "knn": 0.2879999876022339,
+          "spread": 0.07945002664425328,
+          "nmi": 0.11746108865734213
+        }
+      },
+      "diverged": false,
+      "gpu_seconds": 358.939,
+      "bf16_val_knn_last": 0.8960000276565552
+    },
+    {
+      "name": "C-w2048-s1",
+      "width": 2048,
+      "seed": 1,
+      "val_knn": 0.8939999938011169,
+      "collapse_flagged": false,
+      "collapse": {
+        "reasons": {
+          "spread": false,
+          "knn": false,
+          "nmi": false
+        },
+        "stats": {
+          "knn": 0.8939999938011169,
+          "spread": 0.5212302912983251,
+          "nmi": 0.6672801088397031
+        },
+        "anchor_id": "A-S-s1",
+        "anchor": {
+          "knn": 0.30799999833106995,
+          "spread": 0.09695918442227353,
+          "nmi": 0.12657960925391723
+        }
+      },
+      "diverged": false,
+      "gpu_seconds": 359.479,
+      "bf16_val_knn_last": 0.8940000534057617
+    },
+    {
+      "name": "C-w4096-s0",
+      "width": 4096,
+      "seed": 0,
+      "val_knn": 0.8960000276565552,
+      "collapse_flagged": false,
+      "collapse": {
+        "reasons": {
+          "spread": false,
+          "knn": false,
+          "nmi": false
+        },
+        "stats": {
+          "knn": 0.8960000276565552,
+          "spread": 0.5115072109951627,
+          "nmi": 0.6834374580297371
+        },
+        "anchor_id": "A-S-s0",
+        "anchor": {
+          "knn": 0.2879999876022339,
+          "spread": 0.07945002664425328,
+          "nmi": 0.11746108865734213
+        }
+      },
+      "diverged": false,
+      "gpu_seconds": 363.968,
+      "bf16_val_knn_last": 0.8960000276565552
+    },
+    {
+      "name": "C-w4096-s1",
+      "width": 4096,
+      "seed": 1,
+      "val_knn": 0.8999999761581421,
+      "collapse_flagged": false,
+      "collapse": {
+        "reasons": {
+          "spread": false,
+          "knn": false,
+          "nmi": false
+        },
+        "stats": {
+          "knn": 0.8999999761581421,
+          "spread": 0.5185331389260321,
+          "nmi": 0.6851840210644843
+        },
+        "anchor_id": "A-S-s1",
+        "anchor": {
+          "knn": 0.30799999833106995,
+          "spread": 0.09695918442227353,
+          "nmi": 0.12657960925391723
+        }
+      },
+      "diverged": false,
+      "gpu_seconds": 363.443,
+      "bf16_val_knn_last": 0.8960000276565552
+    }
+  ],
+  "seed_spreads": {
+    "1024": 0.012000024318695068,
+    "2048": 0.0059999823570251465,
+    "4096": 0.003999948501586914
+  },
+  "tie_rule": {
+    "baseline": 2048,
+    "baseline_eligible": true,
+    "winner": 2048,
+    "candidates": {
+      "1024": {
+        "values": [
+          0.8840000033378601,
+          0.8960000276565552
+        ],
+        "eligible": true,
+        "mean": 0.8900000154972076,
+        "spread": 0.012000024318695068,
+        "margin": -0.006999969482421875,
+        "threshold": 0.012000024318695068,
+        "beats_baseline": false
+      },
+      "2048": {
+        "values": [
+          0.8999999761581421,
+          0.8939999938011169
+        ],
+        "eligible": true,
+        "mean": 0.8969999849796295,
+        "spread": 0.0059999823570251465
+      },
+      "4096": {
+        "values": [
+          0.8960000276565552,
+          0.8999999761581421
+        ],
+        "eligible": true,
+        "mean": 0.8980000019073486,
+        "spread": 0.003999948501586914,
+        "margin": 0.0010000169277191162,
+        "threshold": 0.0059999823570251465,
+        "beats_baseline": false
+      }
+    },
+    "outcome": "keep 2048"
+  },
+  "winner": 2048
+}
