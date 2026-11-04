@@ -200,6 +200,28 @@ def build_cache(
     }
 
 
+@torch.no_grad()
+def verify_cache(views: np.ndarray, cache: np.ndarray, encoder: Encoder, n_pairs: int = 16, seed: int = 0) -> dict:
+    """Spot-check: recompute ``n_pairs`` random ``(j, v)`` with a live forward and compare to
+    ``cache[j, v]``. Passes if every pair has cosine > 0.999 and max |diff| < 0.05 (fp16)."""
+    device = next(encoder.parameters()).device
+    rng = np.random.default_rng(seed)
+    n, k = views.shape[:2]
+    pairs = [(int(j), int(v)) for j, v in zip(rng.integers(0, n, n_pairs), rng.integers(0, k, n_pairs))]
+    u8 = torch.from_numpy(np.stack([views[j, v] for j, v in pairs])).to(device)
+    with torch.autocast(device.type, dtype=encoder.autocast_dtype or torch.float32, enabled=encoder.autocast_dtype is not None):
+        live = encoder(encoder.preprocess(u8)).float().cpu()
+    cached = torch.from_numpy(np.stack([np.asarray(cache[j, v], dtype=np.float32) for j, v in pairs]))
+    cos = F.cosine_similarity(live, cached, dim=1)
+    max_abs = float((live - cached).abs().max())
+    return {
+        "pairs": pairs,
+        "min_cosine": float(cos.min()),
+        "max_abs_diff": max_abs,
+        "passed": bool(cos.min() > 0.999 and max_abs < 0.05),
+    }
+
+
 def build_teacher_cache(profile: str = "full", device: str | None = None, log: Callable[[str], None] = print) -> Path:
     """Stage body of ``mo433 teacher``: cache every pool view, write ``cache.json``."""
     from mo433 import pool, stages
@@ -210,6 +232,7 @@ def build_teacher_cache(profile: str = "full", device: str | None = None, log: C
     out = cache_path(profile)
     log(f"[teacher] caching {views.shape[0]}x{views.shape[1]} views -> {out}")
     record = build_cache(views, out, enc, log=log)
+    record["spot_check"] = verify_cache(views, np.load(out, mmap_mode="r"), enc)
     record.update(
         gpu_hours=round(record["gpu_seconds"] / 3600, 4),
         wall_hours=round(record["wall_seconds"] / 3600, 4),
@@ -219,6 +242,8 @@ def build_teacher_cache(profile: str = "full", device: str | None = None, log: C
         **stages.git_state(),
     )
     stages._write_atomic(out.with_name(CACHE_META_FILE), record)
+    if not record["spot_check"]["passed"]:
+        raise RuntimeError(f"teacher cache spot-check failed: {record['spot_check']}")
     return out
 
 
