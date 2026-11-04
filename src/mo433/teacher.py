@@ -208,7 +208,8 @@ def build_cache(
 @torch.no_grad()
 def verify_cache(views: np.ndarray, cache: np.ndarray, encoder: Encoder, n_pairs: int = 16, seed: int = 0) -> dict:
     """Spot-check: recompute ``n_pairs`` random ``(j, v)`` with a live forward and compare to
-    ``cache[j, v]``. Passes if every pair has cosine > 0.999 and max |diff| < 0.05 (fp16)."""
+    ``cache[j, v]``. Passes if every pair has cosine > 0.999 and max |diff| < 1% of the largest |feature|; an
+    absolute 0.05 bound sat at fp16 rounding for these magnitudes and failed at random."""
     device = next(encoder.parameters()).device
     rng = np.random.default_rng(seed)
     n, k = views.shape[:2]
@@ -219,11 +220,13 @@ def verify_cache(views: np.ndarray, cache: np.ndarray, encoder: Encoder, n_pairs
     cached = torch.from_numpy(np.stack([np.asarray(cache[j, v], dtype=np.float32) for j, v in pairs]))
     cos = F.cosine_similarity(live, cached, dim=1)
     max_abs = float((live - cached).abs().max())
+    tol = 0.01 * float(live.abs().max())
     return {
         "pairs": pairs,
         "min_cosine": float(cos.min()),
         "max_abs_diff": max_abs,
-        "passed": bool(cos.min() > 0.999 and max_abs < 0.05),
+        "abs_tolerance": tol,
+        "passed": bool(cos.min() > 0.999 and max_abs < tol),
     }
 
 
