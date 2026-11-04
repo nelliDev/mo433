@@ -24,8 +24,6 @@ import torch
 import torch.nn.functional as F
 
 K_VAL = 20
-IMAGENET_MEAN = (0.485, 0.456, 0.406)
-IMAGENET_STD = (0.229, 0.224, 0.225)
 
 
 def _as_tensor(a, device=None, dtype=None) -> torch.Tensor:
@@ -69,18 +67,16 @@ def val_knn(features, labels, splits_dir: Path | None = None, k: int = K_VAL) ->
     return knn_accuracy(x[bank_t], y[bank_t], x[val_t], y[val_t], k)
 
 
-def normalize_u8(u8: torch.Tensor) -> torch.Tensor:
-    """uint8 NHWC [B, 96, 96, 3] -> ImageNet-normalized float32 NCHW (spec §12.1)."""
-    if u8.dtype != torch.uint8 or u8.ndim != 4 or u8.shape[-1] != 3:
-        raise ValueError(f"expected uint8 [B, H, W, 3], got {u8.dtype} {tuple(u8.shape)}")
-    mean = torch.tensor(IMAGENET_MEAN, device=u8.device) * 255
-    std = torch.tensor(IMAGENET_STD, device=u8.device) * 255
-    return ((u8.float() - mean) / std).permute(0, 3, 1, 2).contiguous(memory_format=torch.channels_last)
-
-
 @torch.no_grad()
 def encode(encoder: torch.nn.Module, images: torch.Tensor, batch_size: int = 500, device=None) -> torch.Tensor:
-    """Pooled features [N, d] of uint8 NHWC ``images``, in ``eval()``; the encoder's mode is restored."""
+    """Pooled features [N, d] of uint8 NHWC ``images``, in ``eval()``; the encoder's mode is restored.
+
+    Inputs go through ``encoder.preprocess`` when it has one (``encoders.Encoder``), else
+    ``data.normalize`` (ImageNet mean/std, spec §12.1), so a bare ``ResNet96`` works too.
+    """
+    from mo433.data import normalize
+
+    preprocess = getattr(encoder, "preprocess", normalize)
     if device is None:
         device = next(encoder.parameters()).device
     was_training = encoder.training
@@ -88,7 +84,7 @@ def encode(encoder: torch.nn.Module, images: torch.Tensor, batch_size: int = 500
     try:
         feats = []
         for start in range(0, len(images), batch_size):
-            batch = normalize_u8(images[start : start + batch_size].to(device, non_blocking=True))
+            batch = preprocess(images[start : start + batch_size].to(device, non_blocking=True))
             feats.append(encoder(batch).float().flatten(1))
         return torch.cat(feats)
     finally:
