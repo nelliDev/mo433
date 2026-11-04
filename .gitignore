@@ -10,3 +10,10 @@ artifacts-smoke/
 .claude/
 *.egg-info
 .pytest_cache/
+# LaTeX build files of the report skeleton
+report/*.aux
+report/*.log
+report/*.fls
+report/*.fdb_latexmk
+report/*.out
+report/main.pdf
