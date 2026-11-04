@@ -17,10 +17,6 @@ from pathlib import Path
 
 import numpy as np
 
-IMAGENET_MEAN = (0.485, 0.456, 0.406)
-IMAGENET_STD = (0.229, 0.224, 0.225)
-
-
 class ChunkShuffleSampler:
     """Yields ``(image_idx [B], view_idx [B, views_per_image])`` int64 arrays, one epoch per
     ``iter()``. Iterating to the end advances :attr:`epoch`; :attr:`batch` is the number of
@@ -159,12 +155,9 @@ class PoolLoader:
 
 
 def normalize_gpu(x, device, dtype=None):
-    """uint8 NHWC (CPU, ideally pinned) -> float NCHW on ``device``, ImageNet-normalized
-    (spec §12.1). The result is channels_last in memory (a free permute of NHWC)."""
-    import torch
+    """Pinned uint8 NHWC batch -> ImageNet-normalized float NCHW (channels_last) on ``device``:
+    a non-blocking H2D copy followed by :func:`mo433.data.normalize` (spec §12.1)."""
+    from mo433.data import normalize
 
-    x = x.to(device, non_blocking=True).permute(0, 3, 1, 2).float()
-    mean = torch.tensor(IMAGENET_MEAN, device=x.device).view(1, 3, 1, 1) * 255
-    std = torch.tensor(IMAGENET_STD, device=x.device).view(1, 3, 1, 1) * 255
-    x = x.sub_(mean).div_(std)
+    x = normalize(x.to(device, non_blocking=True))
     return x if dtype is None else x.to(dtype)
