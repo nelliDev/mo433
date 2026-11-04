@@ -1,0 +1,5 @@
+# Row C, size S. Overrides configs/base.yaml.
+row: C
+size: S
+student_width: 24   # ResNet96 base width w (feature dim 8w), spec §4.2
+head_width: 2048
