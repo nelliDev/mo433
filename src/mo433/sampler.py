@@ -11,6 +11,7 @@ a checkpoint is just ``{"seed", "epoch", "batch"}`` (:meth:`PoolLoader.state_dic
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -81,16 +82,27 @@ class _BatchReader:
 
     def __init__(self, path: Path):
         self.path = Path(path)
-        self.views = None
+        mm = np.load(self.path, mmap_mode="r")
+        self.k, self.view_shape, self.data_offset = mm.shape[1], mm.shape[2:], mm.offset
+        self.view_bytes = int(np.prod(self.view_shape))
+        del mm
+        self.fd = None
 
     def __getitem__(self, spec):
         import torch
 
-        if self.views is None:  # opened lazily, once per worker
-            self.views = np.load(self.path, mmap_mode="r")
+        if self.fd is None:  # opened lazily, once per worker
+            self.fd = os.open(self.path, os.O_RDONLY)
+            # The pool (55 GB) exceeds RAM, and a view is 27 KB inside a 553 KB row: kernel
+            # readahead would read most of each row to use 1/10 of it. Read exactly each view.
+            os.posix_fadvise(self.fd, 0, 0, os.POSIX_FADV_RANDOM)
         image_idx, view_idx = spec
-        # Fancy indexing on the memmap gathers only the chosen views; rows of a chunk are adjacent.
-        x = self.views[image_idx[:, None], view_idx]  # [B, v, 96, 96, 3]
+        x = np.empty((*view_idx.shape, *self.view_shape), dtype=np.uint8)  # [B, v, 96, 96, 3]
+        flat = x.reshape(-1, self.view_bytes)
+        offsets = self.data_offset + (image_idx[:, None] * self.k + view_idx).reshape(-1) * self.view_bytes
+        for n in np.argsort(offsets, kind="stable"):  # ascending file order
+            if os.preadv(self.fd, [flat[n]], int(offsets[n])) != self.view_bytes:
+                raise OSError(f"short read from {self.path}")
         return torch.from_numpy(image_idx), torch.from_numpy(view_idx), torch.from_numpy(x)
 
 
