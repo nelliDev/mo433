@@ -65,7 +65,9 @@ def _splits(ctx: Context, args: argparse.Namespace) -> None:
 
 @command("pool", help="write the K-view pool memmap (spec §3)")
 def _pool(ctx: Context, args: argparse.Namespace) -> None:
-    raise NotImplementedError("pool")
+    from mo433 import pool
+
+    pool.run(profile=ctx.profile, force=ctx.force)
 
 
 @command("teacher", help="teacher sanity check and teacher-feature cache (spec §3, §4.1)")
@@ -109,12 +111,62 @@ def _train_all(ctx: Context, args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------- evaluation and reporting
 
 
+def _eval_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--encoder",
+        action="append",
+        default=None,
+        metavar="ID",
+        help="encoder id (repeatable); default: every features/<id>.npz",
+    )
+    p.add_argument(
+        "--provisional-svm",
+        action="store_true",
+        help="while probe C/gamma are null in config, run SVMs with C=1 / C=10,gamma=scale "
+        "(rows marked svm_params_frozen=False) instead of k-NN only",
+    )
+    p.add_argument("--n-jobs", type=int, default=16)
+
+
 def _probe_args(p: argparse.ArgumentParser) -> None:
+    _eval_args(p)
     p.add_argument(
         "--select-svm",
         action="store_true",
-        help="choose SVM C/gamma by 5-fold CV on B-S-100-s0 (spec §7.2) instead of probing",
+        help="choose SVM C/gamma by 5-fold CV on --encoder (default B-S-100-s0, spec §7.2), "
+        "write them into configs/base.yaml, and do not probe",
     )
+    p.add_argument(
+        "--export",
+        action="store_true",
+        help="afterwards copy $MO433_ROOT/results/results.csv to the committed results.csv at the repo root",
+    )
+
+
+def _diagnose_args(p: argparse.ArgumentParser) -> None:
+    _eval_args(p)
+    p.add_argument("--anchor", default=None, help="row-A encoder id to compare against (default: same size+seed)")
+    p.add_argument("--no-tsne", action="store_true", help="skip the t-SNE projection")
+
+
+def _encoders(ctx: Context, args: argparse.Namespace) -> list[str]:
+    from mo433 import probe
+
+    ids = getattr(args, "encoder", None) or probe.available_encoders(ctx.profile)
+    if not ids:
+        raise SystemExit("no cached features found; run `mo433 extract` first")
+    return ids
+
+
+def _svm(ctx: Context, args: argparse.Namespace):
+    from mo433 import probe
+
+    svm = probe.svm_params(ctx.config().probe, provisional=getattr(args, "provisional_svm", False))
+    if svm is None:
+        print("probe C/gamma are null in configs/base.yaml: k-NN only (run `probe --select-svm` or pass --provisional-svm)")
+    elif not svm.frozen:
+        print(f"provisional SVM settings (not frozen): {svm}")
+    return svm
 
 
 EXTRACT_ROWS = ("A", "B", "C", "D")
@@ -146,12 +198,68 @@ def _extract(ctx: Context, args: argparse.Namespace) -> None:
 
 @command("probe", help="k-NN / linear SVM / RBF SVM probes (spec §7.2)", add_args=_probe_args)
 def _probe(ctx: Context, args: argparse.Namespace) -> None:
-    raise NotImplementedError("probe --select-svm" if args.select_svm else "probe")
+    from mo433 import probe
+
+    n_jobs = getattr(args, "n_jobs", 16)
+    if args.select_svm:
+        encoders = getattr(args, "encoder", None) or [probe.SELECTION_ENCODER]
+        if len(encoders) != 1:
+            raise SystemExit("--select-svm takes exactly one --encoder")
+        try:
+            rec = probe.select_svm(encoders[0], profile=ctx.profile, n_jobs=n_jobs)
+        except probe.SvmSelectionRefused as e:
+            raise SystemExit(f"mo433 probe --select-svm: {e}") from e
+        print(
+            f"selected linear C={rec['linear_c']} (cv {rec['linear_cv_acc']:.4f}), "
+            f"rbf C={rec['rbf_c']} gamma={rec['rbf_gamma']} (cv {rec['rbf_cv_acc']:.4f}); "
+            "written to configs/base.yaml"
+        )
+        return
+
+    svm = _svm(ctx, args)
+    for eid in _encoders(ctx, args):
+
+        def build(eid=eid):
+            rows = probe.probe_encoder(eid, svm, profile=ctx.profile, n_jobs=n_jobs)
+            summary = {(r["probe"]): r["accuracy"] for r in rows if r["label_frac"] == 100 and r["draw"] == 0}
+            print(f"{eid}: 100% labels " + ", ".join(f"{k}={v:.4f}" for k, v in summary.items()))
+
+        # Only frozen-setting results are final; k-NN-only/provisional probes always rerun.
+        if svm is not None and svm.frozen:
+            ctx.run_stage(f"probe/{eid}", build)
+        else:
+            build()
+    if getattr(args, "export", False):
+        print(f"exported results.csv to {probe.export_results(ctx.profile)}")
 
 
-@command("diagnose", help="collapse check and characterization (spec §7.3)")
+@command("diagnose", help="collapse check and characterization (spec §7.3)", add_args=_diagnose_args)
 def _diagnose(ctx: Context, args: argparse.Namespace) -> None:
-    raise NotImplementedError("diagnose")
+    from mo433 import diagnostics
+
+    svm = _svm(ctx, args)
+    for eid in _encoders(ctx, args):
+
+        def build(eid=eid):
+            rec = diagnostics.diagnose_encoder(
+                eid,
+                profile=ctx.profile,
+                svm=svm,
+                anchor=getattr(args, "anchor", None),
+                tsne=not getattr(args, "no_tsne", False),
+                n_jobs=getattr(args, "n_jobs", 16),
+            )
+            check = rec.get("teacher_check") or rec.get("collapse_check")
+            verdict = "n/a (row A)" if check is None else (
+                ("PASS" if check["passed"] else "FAIL") if "passed" in check else
+                ("FLAGGED" if check["flagged"] else "ok")
+            )
+            print(f"{eid}: val {rec['val_stats']}, check {verdict}, test {rec['test_characterization']}")
+
+        if svm is not None and svm.frozen:
+            ctx.run_stage(f"diagnose/{eid}", build)
+        else:
+            build()
 
 
 @command("measure", help="params, FLOPs, latency, GPU-hours (spec §7.4)")
