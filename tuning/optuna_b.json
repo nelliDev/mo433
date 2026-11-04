@@ -34,8 +34,8 @@
       ]
     },
     "trial0": {
-      "lr": 0.0028558776451619457,
-      "weight_decay": 0.10957948710049177,
+      "lr": 0.001,
+      "weight_decay": 0.05,
       "warmup_epochs": 2
     },
     "objective": "fp32 validation k-NN (k=20, cosine) of the final backbone; pruner sees per-epoch bf16 val_knn",

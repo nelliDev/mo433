@@ -37,8 +37,10 @@ def artifacts_root(profile: str = "full") -> Path:
 
 
 def pool_dir(profile: str = "full") -> Path:
-    """``$MO433_POOL``, or ``<artifacts_root>/pool``."""
-    return _env_path("MO433_POOL") or artifacts_root(profile) / "pool"
+    """``$MO433_POOL``, or ``<artifacts_root>/pool``. Smoke never uses ``$MO433_POOL``: it points at
+    the real 55 GB pool, which ``mo433 --profile smoke pool --force`` would otherwise delete."""
+    env = _env_path("MO433_POOL") if profile != "smoke" else None
+    return env or artifacts_root(profile) / "pool"
 
 
 def data_root() -> Path:

@@ -7,7 +7,7 @@ epochs: 100         # E
 batch_size: 256     # pairs for B, images for C
 head_width: 2048    # B expander / C projector hidden width; tuning grid may override per row-size file
 
-optimizer:          # fallback until the Optuna study (spec §6.1) fills the winner
+optimizer:          # Optuna winner (spec §6.1, tuning/optuna_b.json); fallback 1e-3 / 0.05 / 2 lives in tune.TRIAL0
   name: adamw
   lr: 0.0028558776451619457
   weight_decay: 0.10957948710049177

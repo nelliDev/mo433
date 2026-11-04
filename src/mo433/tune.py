@@ -62,10 +62,14 @@ LARS_WDS = (1e-6, 1e-4)
 REPO_TUNING_DIR = paths.REPO_ROOT / "tuning"
 
 
+# Spec §6.1: trial 0 is the smoke config, which is also the fallback. Pinned here rather than read
+# from configs/base.yaml, because ``tune optuna --apply`` overwrites that file with the winner.
+TRIAL0 = {"lr": 1e-3, "weight_decay": 0.05, "warmup_epochs": 2}
+
+
 def trial0_params() -> dict[str, Any]:
-    """The smoke config = the fallback in ``configs/base.yaml`` (1e-3 / 0.05 / 2)."""
-    opt = config_mod.load_config("B", "S").optimizer
-    return {"lr": opt.lr, "weight_decay": opt.weight_decay, "warmup_epochs": opt.warmup_epochs}
+    """The smoke config = the fallback (1e-3 / 0.05 / 2)."""
+    return dict(TRIAL0)
 
 
 # ---------------------------------------------------------------- selection rules
