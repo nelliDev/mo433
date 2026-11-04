@@ -153,9 +153,32 @@ def _measure(ctx: Context, args: argparse.Namespace) -> None:
     raise NotImplementedError("measure")
 
 
-@command("report", help="results.csv -> LaTeX tables, macros and figures (spec §9)")
+def _report_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--repo-root",
+        default=None,
+        metavar="DIR",
+        help="where the committed inputs (results.csv, report/data/) and outputs (report/) live; default: this repo",
+    )
+    p.add_argument(
+        "--no-sync",
+        action="store_true",
+        help="do not copy $MO433_ROOT/results/* into the committed inputs; build from committed files only",
+    )
+
+
+@command("report", help="results.csv -> LaTeX tables, macros and figures (spec §9)", add_args=_report_args)
 def _report(ctx: Context, args: argparse.Namespace) -> None:
-    raise NotImplementedError("report")
+    # Committed outputs: always regenerated, no .done marker (like `splits`). Never imports torch.
+    from pathlib import Path
+
+    from mo433 import report
+
+    root = Path(args.repo_root) if getattr(args, "repo_root", None) else None
+    inputs = report.Inputs.committed(root)
+    if not getattr(args, "no_sync", False):
+        report.sync_inputs(ctx.profile, inputs)
+    report.build_report(inputs, (root / "report") if root else None)
 
 
 # ---------------------------------------------------------------- tuning
