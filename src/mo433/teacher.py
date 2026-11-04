@@ -29,6 +29,11 @@ DIM = 384
 INPUT_SIZE = 224
 
 
+def _log(msg: str) -> None:
+    """Default progress logger: flushed, so a redirected log file shows progress live."""
+    print(msg, flush=True)
+
+
 def preprocess(u8: torch.Tensor) -> torch.Tensor:
     """uint8 NHWC ``[B, 96, 96, 3]`` -> float32 ``[B, 3, 224, 224]``, on ``u8``'s device.
 
@@ -134,7 +139,7 @@ def build_cache(
     *,
     batch_size: int = 256,
     rows_per_chunk: int = 64,
-    log: Callable[[str], None] = print,
+    log: Callable[[str], None] = _log,
 ) -> dict:
     """Write the teacher feature of every ``views[j, v]`` to ``out_path`` (float16 ``[N, K, dim]``
     ``.npy``) atomically (``.partial`` + rename) and return the timing record.
@@ -222,7 +227,7 @@ def verify_cache(views: np.ndarray, cache: np.ndarray, encoder: Encoder, n_pairs
     }
 
 
-def build_teacher_cache(profile: str = "full", device: str | None = None, log: Callable[[str], None] = print) -> Path:
+def build_teacher_cache(profile: str = "full", device: str | None = None, log: Callable[[str], None] = _log) -> Path:
     """Stage body of ``mo433 teacher``: cache every pool view, write ``cache.json``."""
     from mo433 import pool, stages
 
@@ -277,7 +282,7 @@ def sanity_path(profile: str = "full") -> Path:
     return paths.teacher_dir(profile) / SANITY_FILE
 
 
-def run_sanity(profile: str = "full", log: Callable[[str], None] = print) -> dict:
+def run_sanity(profile: str = "full", log: Callable[[str], None] = _log) -> dict:
     """Stage body: sanity check on ``features/D.npz``, written to ``teacher/sanity.json``.
     Raises if the teacher fails, so the stage gets no ``.done`` marker."""
     from mo433 import extract, stages
