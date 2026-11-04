@@ -1,11 +1,13 @@
 """Stage module: ``mo433 measure``, the cost table (spec §7.4, §11, §12.3–12.4).
 
 Costs are per *architecture*, not per trained encoder: every A/B/C encoder of a size shares
-the ResNet96 architecture, so they share params, FLOPs and latency. The report joins on
-``rows`` / size. Outputs, under ``results_dir(profile)`` (``$MO433_ROOT/results/``):
+the ResNet96 architecture, so they share params, FLOPs and latency. ``report`` maps any
+encoder id to its architecture key (``report.arch_key``). The columns ``report`` requires
+are ``report.COSTS_COLUMNS`` / ``report.RUNS_COST_COLUMNS``; the rest are additions.
+Outputs, under ``results_dir(profile)`` (``$MO433_ROOT/results/``):
 
-``costs.csv``: one row per architecture (``ResNet96-S``, ``ResNet96-L``, ``D``)
-    encoder_id            ``ResNet96-S`` | ``ResNet96-L`` | ``D``
+``costs.csv``: one row per architecture
+    encoder_id            ``S`` | ``L`` (ResNet96 students) | ``D`` (teacher)
     kind                  ``student`` | ``teacher``
     rows                  the encoders it covers: ``A/B/C-S``, ``A/B/C-L``, ``D``
     params                trainable + frozen parameter count of the probed network
@@ -15,11 +17,11 @@ the ResNet96 architecture, so they share params, FLOPs and latency. The report j
     input_px              96 for the students, 224 for the teacher (its 96->224 resize and
                           normalization are not counted or timed)
     gpu_batch             256
-    gpu_latency_ms_mean   ms per fp32 batch, ``eval()`` + ``no_grad``, 10 warm-up batches,
+    gpu_latency_ms        ms per fp32 batch, ``eval()`` + ``no_grad``, 10 warm-up batches,
     gpu_latency_ms_sd     mean / sd over 100 timed batches, each closed by ``cuda.synchronize()``
     gpu_throughput_img_s  gpu_batch / mean latency
     cpu_threads           16
-    cpu_latency_ms_mean   ms per batch-1 forward on the CPU (10 warm-up, 100 timed)
+    cpu_latency_ms        ms per batch-1 forward on the CPU (10 warm-up, 100 timed)
     cpu_latency_ms_sd
     gpu_name              ``torch.cuda.get_device_name(0)``
     gpu_other_processes   other CUDA compute processes seen by nvidia-smi right before or
@@ -82,8 +84,8 @@ SUMMARY_JSON = "costs_summary.json"
 
 COST_COLUMNS = (
     "encoder_id", "kind", "rows", "params", "flops", "macs", "feature_dim", "input_px",
-    "gpu_batch", "gpu_latency_ms_mean", "gpu_latency_ms_sd", "gpu_throughput_img_s",
-    "cpu_threads", "cpu_latency_ms_mean", "cpu_latency_ms_sd",
+    "gpu_batch", "gpu_latency_ms", "gpu_latency_ms_sd", "gpu_throughput_img_s",
+    "cpu_threads", "cpu_latency_ms", "cpu_latency_ms_sd",
     "gpu_name", "gpu_other_processes", "cpu_load1", "provisional", "provisional_reason", "measured_at",
 )  # fmt: skip
 RUN_COLUMNS = (
@@ -110,7 +112,7 @@ def _targets(sizes, teacher: bool):
     """(metadata, frozen eval net) per measured architecture, built lazily."""
     for size in sizes:
         net = build_student(size, 0).eval().requires_grad_(False)
-        meta = {"encoder_id": f"ResNet96-{size}", "kind": "student", "rows": f"A/B/C-{size}"}
+        meta = {"encoder_id": size, "kind": "student", "rows": f"A/B/C-{size}"}
         yield meta | {"feature_dim": net.dim, "input_px": STUDENT_PX}, net
     if teacher:
         yield {"encoder_id": "D", "kind": "teacher", "rows": "D", "feature_dim": 384, "input_px": TEACHER_PX}, (
@@ -347,11 +349,11 @@ def measure(
             reasons.append(f"CPU load {load:.1f} > {CPU_LOAD_LIMIT:g}")
         row |= {
             "gpu_batch": GPU_BATCH if gpu else None,
-            "gpu_latency_ms_mean": _r(gpu[0]) if gpu else None,
+            "gpu_latency_ms": _r(gpu[0]) if gpu else None,
             "gpu_latency_ms_sd": _r(gpu[1]) if gpu else None,
             "gpu_throughput_img_s": round(GPU_BATCH / gpu[0] * 1000, 1) if gpu else None,
             "cpu_threads": CPU_THREADS,
-            "cpu_latency_ms_mean": _r(cpu[0]),
+            "cpu_latency_ms": _r(cpu[0]),
             "cpu_latency_ms_sd": _r(cpu[1]),
             "gpu_name": gpu_name,
             "gpu_other_processes": "; ".join(others),
@@ -362,7 +364,7 @@ def measure(
         }
         log(
             f"[measure] {row['encoder_id']}: {row['params'] / 1e6:.2f}M params, {row['macs'] / 1e9:.3f} GMACs, "
-            f"GPU {row['gpu_latency_ms_mean']} ms/b{GPU_BATCH}, CPU {row['cpu_latency_ms_mean']} ms/b1"
+            f"GPU {row['gpu_latency_ms']} ms/b{GPU_BATCH}, CPU {row['cpu_latency_ms']} ms/b1"
             + (f" (provisional: {row['provisional_reason']})" if reasons else "")
         )
         rows.append(row)
