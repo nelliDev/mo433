@@ -227,6 +227,23 @@ def build_pool(
     return final
 
 
+def run(profile: str = "full", force: bool = False, num_workers: int = 14) -> Path:
+    """`mo433 pool`: build the profile's pool (N, K from the config) under ``paths.pool_dir``."""
+    from mo433 import config, paths, stages
+
+    cfg = config.load_config(profile=profile)
+    out_dir = paths.pool_dir(profile)
+
+    def build() -> None:
+        if force:
+            remove_pool(out_dir)
+        build_pool(out_dir, n_images=cfg.n_images, k_views=cfg.k_views, data_root=paths.data_root(),
+                   num_workers=num_workers)
+
+    stages.run_stage("pool", build, profile=profile, force=force)
+    return out_dir / VIEWS_FILE
+
+
 def remove_pool(out_dir: Path) -> None:
     for name in (VIEWS_FILE, META_FILE, PARTIAL_FILE, PROGRESS_FILE):
         (Path(out_dir) / name).unlink(missing_ok=True)
