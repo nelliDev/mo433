@@ -77,17 +77,19 @@ def test_measure_stage_writes_cost_tables(mo433_root, monkeypatch):
 
     _write_json(mo433_root / "runs/C-S-100-s0/summary.json", {"wall_seconds": 3600, "gpu_seconds": 3600})
     _write_json(mo433_root / "teacher/cache_timing.json", {"gpu_seconds": 360})
+    # A shared GPU, faked so the test never touches the real one.
     monkeypatch.setattr(measure, "query_gpu_processes", lambda: ["999 trainer 3000 MiB"])
+    monkeypatch.setattr(measure, "gpu_name", lambda: "Fake 3060")
+    monkeypatch.setattr(measure, "gpu_latency", lambda net, px, **kw: (64.0, 2.0))
 
-    measure.measure(teacher=False, timed=2, warmup=1)
+    measure.measure(teacher=False, timed=2, warmup=1, cuda=True)
 
     costs = list(csv.DictReader(open(mo433_root / "results/costs.csv")))
     assert [r["encoder_id"] for r in costs] == ["S", "L"]
-    assert {"params", "macs", "flops", "feature_dim", "gpu_latency_ms", "gpu_latency_ms_sd",
-            "cpu_latency_ms", "provisional"} <= set(costs[0])
-    assert float(costs[0]["cpu_latency_ms"]) > 0
-    if torch.cuda.is_available():
-        assert costs[0]["provisional"] == "True" and "999 trainer" in costs[0]["gpu_other_processes"]
+    s = costs[0]
+    assert (s["gpu_latency_ms"], s["gpu_latency_ms_sd"], s["gpu_throughput_img_s"]) == ("64.0", "2.0", "4000.0")
+    assert float(s["cpu_latency_ms"]) > 0 and s["gpu_name"] == "Fake 3060"
+    assert s["provisional"] == "True" and "999 trainer" in s["gpu_other_processes"]
     runs = list(csv.DictReader(open(mo433_root / "results/runs_cost.csv")))
     assert runs[0]["run_id"] == "C-S-100-s0" and float(runs[0]["total_gpu_h"]) == 1.1
     summary = json.loads((mo433_root / "results/costs_summary.json").read_text())
@@ -101,9 +103,7 @@ def test_report_reads_measure_outputs(mo433_root, monkeypatch):
     _write_json(mo433_root / "runs/B-S-100-s0/summary.json", {"wall_seconds": 7200, "gpu_seconds": 3600})
     _write_json(mo433_root / "runs/C-S-100-s0/summary.json", {"wall_seconds": 3600, "gpu_seconds": 3600})
     _write_json(mo433_root / "teacher/cache_timing.json", {"gpu_seconds": 360})
-    monkeypatch.setattr(measure, "query_gpu_processes", lambda: [])
-
-    measure.measure(teacher=False, timed=2, warmup=1)
+    measure.measure(teacher=False, timed=2, warmup=1, cuda=False)  # CPU only
 
     costs = report.read_costs(mo433_root / "results/costs.csv")
     assert set(costs) == {"S", "L"}
@@ -112,6 +112,16 @@ def test_report_reads_measure_outputs(mo433_root, monkeypatch):
     runs = report.read_runs_cost(mo433_root / "results/runs_cost.csv")
     assert runs["B-S-100-s0"] == {"wall_h": 2.0, "gpu_h": 1.0, "teacher_cache_gpu_h_charged": 0.0}
     assert runs["C-S-100-s0"] == {"wall_h": 1.0, "gpu_h": 1.0, "teacher_cache_gpu_h_charged": 0.1}
+
+
+@pytest.mark.gpu
+def test_gpu_latency_of_small_student_is_positive():
+    if measure.query_gpu_processes():
+        pytest.skip("GPU busy with other processes")
+    from mo433.students import build_student
+
+    mean, sd = measure.gpu_latency(build_student("S", 0).eval(), 96, batch=8, warmup=1, timed=3)
+    assert mean > 0 and sd >= 0
 
 
 def test_cli_measure_runs_as_a_stage(mo433_root, monkeypatch):
@@ -123,6 +133,12 @@ def test_cli_measure_runs_as_a_stage(mo433_root, monkeypatch):
     assert cli.main(["measure"]) == 0  # done marker: skipped
     assert cli.main(["measure", "--force"]) == 0
     assert calls == ["full", "full"]
+
+
+def test_teacher_cache_time_is_read_from_cache_json_in_hours(mo433_root):
+    # the record `mo433 teacher` (#18) writes next to the cache
+    _write_json(mo433_root / "teacher/cache.json", {"gpu_hours": 0.5, "wall_hours": 0.6, "spot_check": {}})
+    assert measure.teacher_cache_gpu_seconds() == 1800.0
 
 
 def test_missing_runs_and_cache_give_no_rows(mo433_root):
