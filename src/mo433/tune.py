@@ -380,12 +380,13 @@ def optuna_summary(study, *, n_trials: int, epochs: int, profile: str) -> dict:
 
 
 def run_cli(study: str, *, profile: str, n_trials: int | None = None, epochs: int | None = None,
-            rows: list[str] | None = None, apply: bool = False, force: bool = False) -> None:
+            rows: list[str] | None = None, apply: bool = False, force: bool = False,
+            overrides: dict[str, Any] | None = None) -> None:
     if apply:
         apply_winners(study, profile=profile)
         return
     if study == "optuna":
-        run_optuna(profile=profile, n_trials=n_trials, epochs=epochs)
+        run_optuna(profile=profile, n_trials=n_trials, epochs=epochs, overrides=overrides)
     else:
         raise NotImplementedError(f"tune {study}")
 
