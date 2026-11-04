@@ -1,0 +1,54 @@
+% Minimal skeleton that \input's every generated file, so `latexmk -pdf main.tex` (run in
+% report/) checks that the generated tables, macros and figures compile. Replace it with the
+% course template once announced; keep the \input lines.
+\documentclass[10pt]{article}
+\usepackage[margin=2cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{amsmath}
+
+\input{generated/macros}
+
+\title{Distilling Unsupervised Representations into Small Models}
+\author{MO433}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Results}
+At 10\% labels, the small distilled student reaches \AccCSFullLinTen\% (linear SVM) against
+\AccBSFullLinTen\% for VICReg, a C$-$B gap of \GapSFullLinTen~pp (reference sd \GapSdSFullLinTen;
+beyond spread: \GapBeyondSFullLinTen). The teacher reaches \AccDLinHundred\% with all labels.
+
+\input{generated/main_probes}
+\input{generated/l_runs}
+\input{generated/ablation}
+\input{generated/multiscale}
+\input{generated/costs}
+\input{generated/budget}
+\input{generated/diagnostics}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/label_efficiency}\hfill
+  \includegraphics[width=0.48\linewidth]{figures/gap_vs_params}
+  \caption{Left: label efficiency (linear SVM; error bars: seed sd, D: draw sd).
+    Right: C$-$B gap vs student parameters (error bars: larger of B's and C's seed sd).}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/tsne}
+  \caption{t-SNE of test-split features (perplexity 30, \texttt{random\_state=0}).}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/ablation_grid}
+  \caption{Ablation grid: C$-$B gap per unlabeled-data setting $\times$ student size
+    ($^*$ beyond spread).}
+\end{figure}
+
+\end{document}
