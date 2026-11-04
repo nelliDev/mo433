@@ -65,8 +65,10 @@ CONFIG = "config.json"
 _RESUME_FREE = {"knn_every", "num_workers", "checkpoint_every"}
 OVERRIDABLE = {
     "lr", "weight_decay", "warmup_epochs", "head_width", "epochs", "batch_size", "n_images",
-    "knn_every", "checkpoint_every", "num_workers", "device",
+    "knn_every", "checkpoint_every", "num_workers", "device", "optimizer",
 }
+OPTIMIZERS = ("adamw", "lars")
+LARS_MOMENTUM = 0.9
 
 
 # ---------------------------------------------------------------- integration points
@@ -119,6 +121,7 @@ class RunSettings:
     weight_decay: float
     warmup_epochs: int
     betas: tuple[float, float]
+    optimizer: str = "adamw"  # "lars": LARS check (spec §6.3) only; see build_optimizer
     on_the_fly: bool = False
     knn_every: int = 1  # validation k-NN every N epochs (and at the last); 0 = never
     checkpoint_every: int = 10
@@ -455,7 +458,7 @@ def train_run(
     backbone = _deps.build_student(s.size, s.seed)
     model = Model(backbone, objective.build_head(backbone.dim)).to(device, memory_format=torch.channels_last)
     model.train()
-    opt = torch.optim.AdamW(model.parameters(), lr=s.lr, betas=s.betas, weight_decay=s.weight_decay)
+    opt = build_optimizer(model, s)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda step: lr_factor(step, s.warmup_steps, s.total_steps))
     source: BatchSource = (OnTheFlySource if s.on_the_fly else PoolSource)(s, objective.views_per_sample)
 
@@ -580,9 +583,30 @@ def _settings_dict(s: RunSettings) -> dict:
     return d
 
 
+def build_optimizer(model: nn.Module, s: RunSettings) -> torch.optim.Optimizer:
+    """AdamW with weight decay on all params (spec §5.1), or, for the LARS check (spec §6.3),
+    ``lightly`` LARS (momentum 0.9, trust 0.001) with biases and BN params excluded from weight
+    decay and from the LARS adaptation, as in the VICReg reference implementation."""
+    if s.optimizer == "adamw":
+        return torch.optim.AdamW(model.parameters(), lr=s.lr, betas=s.betas, weight_decay=s.weight_decay)
+    if s.optimizer == "lars":
+        from lightly.utils.lars import LARS
+
+        params = [p for p in model.parameters() if p.requires_grad]
+        groups = [{"params": [p for p in params if p.ndim > 1]},
+                  {"params": [p for p in params if p.ndim <= 1], "weight_decay": 0.0}]
+        return LARS(groups, lr=s.lr, momentum=LARS_MOMENTUM, weight_decay=s.weight_decay)
+    raise ValueError(f"optimizer must be one of {OPTIMIZERS}, got {s.optimizer!r}")
+
+
+_FIELD_DEFAULTS = {f.name: f.default for f in dataclasses.fields(RunSettings) if f.default is not dataclasses.MISSING}
+
+
 def _check_resumable(saved: dict, s: RunSettings) -> None:
     now = _settings_dict(s)
-    diff = {k: (saved.get(k), now[k]) for k in now if k not in _RESUME_FREE and saved.get(k) != now[k]}
+    # Settings added after a checkpoint was written resume as their default.
+    diff = {k: (saved.get(k, _FIELD_DEFAULTS.get(k)), now[k]) for k in now
+            if k not in _RESUME_FREE and saved.get(k, _FIELD_DEFAULTS.get(k)) != now[k]}
     if diff:
         raise ValueError(f"checkpoint was made with different settings {diff}; use a fresh run dir or --force")
 

@@ -33,6 +33,7 @@ Decisions fixed here (documented in the summaries):
 from __future__ import annotations
 
 import json
+import re
 import math
 import shutil
 import sqlite3
@@ -376,6 +377,339 @@ def optuna_summary(study, *, n_trials: int, epochs: int, profile: str) -> dict:
     }
 
 
+# ---------------------------------------------------------------- shared: one scored 20-epoch run
+
+SCORE = "score.json"
+
+
+def _default_epochs(profile: str, full: int = TRIAL_EPOCHS) -> int:
+    return full if profile == "full" else config_mod.load_config("B", "S", profile).epochs
+
+
+def _scored_run(row: str, seed: int, run_dir: Path, overrides: dict, epochs: int, profile: str,
+                scorer_box: list, log) -> dict:
+    """Train (or resume) one S run at frac 100 and score its final weights; cached in ``score.json``."""
+    from mo433 import train
+
+    run_dir = Path(run_dir)
+    cached = run_dir / SCORE
+    if cached.exists():
+        return json.loads(cached.read_text())
+    try:
+        summary = train.train_run(row, "S", 100, seed, profile=profile, overrides=overrides, run_dir=run_dir,
+                                  epochs=epochs, log=log)
+    except train.TrainingDiverged as e:
+        res = {"val_knn": None, "collapse_flagged": True, "diverged": True, "error": str(e)}
+    else:
+        if not scorer_box:
+            scorer_box.append(_Scorer(profile, summary["settings"]["device"]))
+        res = {**scorer_box[0](run_dir, "S", seed), "diverged": False, "gpu_seconds": summary["gpu_seconds"],
+               "bf16_val_knn_last": summary["final"].get("val_knn")}
+    _drop_checkpoint(run_dir)
+    _write_json(cached, res)
+    return res
+
+
+def _optuna_optimizer(profile: str) -> tuple[dict, str]:
+    """The Optuna winner (lr, wd, warmup) if its summary exists, else the configs' optimizer."""
+    for path in (paths.tuning_dir(profile) / f"{STUDY_NAME}.json", REPO_TUNING_DIR / f"{STUDY_NAME}.json"):
+        if path.exists() and (profile == "full" or path.parent != REPO_TUNING_DIR):
+            w = json.loads(path.read_text()).get("winner")
+            if w:
+                return dict(w["params"]), f"optuna winner (trial {w['number']})"
+    return trial0_params(), "configs/base.yaml optimizer (no optuna winner found)"
+
+
+# ---------------------------------------------------------------- 6.2 equal-effort grid
+
+
+def run_grid(profile: str = "full", rows: list[str] | None = None, epochs: int | None = None,
+             overrides: dict[str, Any] | None = None, log: Callable[[str], None] = print) -> dict[str, dict]:
+    """B expander / C projector width ∈ {1024, 2048, 4096} × seeds {0, 1}, 20 epochs, with the
+    Optuna winner's optimizer; the tie rule picks each row's width (spec §6.2)."""
+    rows = list(rows or config_mod.ROWS)
+    epochs = epochs if epochs is not None else _default_epochs(profile)
+    opt, source = _optuna_optimizer(profile)
+    scorer_box: list = []
+    out = {}
+    for row in rows:
+        points = []
+        for width in GRID_WIDTHS:
+            for seed in GRID_SEEDS:
+                name = f"{row}-w{width}-s{seed}"
+                rd = paths.tuning_dir(profile) / "grid" / name
+                log(f"[tune grid] {name}: {opt}")
+                ov = {"checkpoint_every": TRIAL_CHECKPOINT_EVERY, **(overrides or {}), **opt, "head_width": width}
+                res = _scored_run(row, seed, rd, ov, epochs, profile, scorer_box, log)
+                points.append({"name": name, "width": width, "seed": seed, **res})
+                log(f"[tune grid] {name}: val_knn={res['val_knn']} flagged={res['collapse_flagged']}")
+        scores = {w: [p["val_knn"] if not p["collapse_flagged"] else None for p in points if p["width"] == w]
+                  for w in GRID_WIDTHS}
+        rule = tie_rule(scores)
+        summary = {
+            "row": row, "size": "S", "profile": profile, "epochs": epochs, "seeds": list(GRID_SEEDS),
+            "widths": list(GRID_WIDTHS), "optimizer": opt, "optimizer_source": source,
+            "score": "fp32 validation k-NN (k=20, cosine) of the final backbone",
+            "spread_definition": "|s0 - s1| (range of the two seeds)",
+            "collapse_rule": "a width with any collapse-flagged (or diverged) seed is ineligible",
+            "points": points,
+            "seed_spreads": {w: c["spread"] for w, c in rule["candidates"].items()},
+            "tie_rule": rule,
+            "winner": rule["winner"],
+        }
+        _publish(profile, f"grid_{row}.json", summary)
+        log(f"[tune grid] {row}: {rule['outcome']} -> head_width {rule['winner']}")
+        out[row] = summary
+    return out
+
+
+# ---------------------------------------------------------------- 6.3 LARS check
+
+
+def run_lars(profile: str = "full", epochs: int | None = None, overrides: dict[str, Any] | None = None,
+             log: Callable[[str], None] = print) -> dict:
+    """6 runs: B, S, seed 0, 20 epochs, LARS with base lr ∈ {0.2, 1, 2} × wd ∈ {1e-6, 1e-4},
+    lr = base × batch/256, warmup from the Optuna winner (spec §6.3). Meant for Kaggle."""
+    epochs = epochs if epochs is not None else _default_epochs(profile)
+    opt, source = _optuna_optimizer(profile)
+    batch = (overrides or {}).get("batch_size", config_mod.load_config("B", "S", profile).batch_size)
+    scorer_box: list = []
+    trials = []
+    for base_lr in LARS_LRS:
+        for wd in LARS_WDS:
+            name = f"lr{base_lr:g}-wd{wd:g}"
+            ov = {"checkpoint_every": TRIAL_CHECKPOINT_EVERY, **(overrides or {}), "optimizer": "lars",
+                  "lr": base_lr * batch / 256, "weight_decay": wd, "warmup_epochs": opt["warmup_epochs"],
+                  "head_width": TRIAL_WIDTH}
+            log(f"[tune lars] {name}: lr={ov['lr']:g}")
+            res = _scored_run("B", 0, paths.tuning_dir(profile) / "lars" / name, ov, epochs, profile, scorer_box, log)
+            trials.append({"name": name, "base_lr": base_lr, "lr": ov["lr"], "weight_decay": wd, **res})
+            log(f"[tune lars] {name}: val_knn={res['val_knn']} flagged={res['collapse_flagged']}")
+    best = max((t for t in trials if not t["collapse_flagged"] and t["val_knn"] is not None),
+               key=lambda t: t["val_knn"], default=None)
+    optuna_value = None
+    p = paths.tuning_dir(profile) / f"{STUDY_NAME}.json"
+    if p.exists() and json.loads(p.read_text()).get("winner"):
+        optuna_value = json.loads(p.read_text())["winner"]["value"]
+    summary = {
+        "profile": profile, "epochs": epochs, "batch_size": batch, "lr_scaling": "lr = base_lr * batch / 256",
+        "optimizer": "lightly LARS, momentum 0.9, trust 0.001; bias/BN excluded from wd and adaptation",
+        "warmup_epochs": opt["warmup_epochs"], "warmup_source": source,
+        "trials": trials,
+        "best": best and {k: best[k] for k in ("name", "base_lr", "weight_decay", "val_knn")},
+        "optuna_winner_value": optuna_value,
+        "reopens_optimizer_decision": None if best is None or optuna_value is None else best["val_knn"] > optuna_value,
+    }
+    _publish(profile, "lars.json", summary)
+    return summary
+
+
+# ---------------------------------------------------------------- 6.4 fixed-view control
+
+MAIN_POOL_RUN = "B-S-100-s0"
+FROZEN_TAG = "configs-frozen"
+_FV_CONFIGS = ("base.yaml", "B-S.yaml")
+
+
+def configs_hash() -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    for name in _FV_CONFIGS:
+        h.update((paths.CONFIGS_DIR / name).read_bytes())
+    return h.hexdigest()
+
+
+def frozen_configs_identical() -> bool:
+    """True if the ``configs-frozen`` tag exists and B-S's configs are byte-identical to it."""
+    import subprocess
+
+    for name in _FV_CONFIGS:
+        r = subprocess.run(["git", "show", f"{FROZEN_TAG}:configs/{name}"], cwd=paths.REPO_ROOT, capture_output=True)
+        if r.returncode != 0 or r.stdout != (paths.CONFIGS_DIR / name).read_bytes():
+            return False
+    return True
+
+
+def _twin_features(run_dir: Path, encoder_id: str, profile: str) -> dict:
+    """Spec §7.1 features of a twin's final backbone (train + test splits), cached as an npz."""
+    import numpy as np
+    import torch
+
+    from mo433 import extract
+    from mo433.data import load_stl10
+    from mo433.encoders import FINAL_BACKBONE, student_encoder
+    from mo433.students import build_student
+
+    out = paths.features_dir(profile) / f"{encoder_id}.npz"
+    if not out.exists():
+        net = build_student("S", 0)
+        net.load_state_dict(torch.load(run_dir / FINAL_BACKBONE, map_location="cpu", weights_only=True))
+        enc = student_encoder(encoder_id, net).to(_device())
+        arrays = {"encoder_id": np.array(encoder_id)}
+        for split in extract.SPLITS:
+            images, labels = load_stl10(split)
+            arrays[f"{split}_y"] = labels.numpy().astype(np.int64)
+            arrays.update({f"{split}_{k}": v for k, v in extract.extract_features(enc, images).items()})
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_name(f".{out.stem}.tmp.npz")
+        np.savez(tmp, **arrays)
+        tmp.replace(out)
+    with np.load(out) as z:
+        return {k: z[k] for k in z.files}
+
+
+def _evaluate_twin(feats: dict, encoder_id: str, profile: str) -> dict:
+    from mo433 import diagnostics, knn, probe
+
+    svm = probe.svm_params(config_mod.load_config(profile=profile).probe)
+    stats = diagnostics.collapse_stats(feats["train_x"], feats["train_y"])
+    anchor = None
+    if (paths.features_dir(profile) / "A-S-s0.npz").exists():
+        a = probe.load_features("A-S-s0", profile)
+        anchor = diagnostics.collapse_stats(a["train_x"], a["train_y"])
+    check = diagnostics.collapse_check(stats, anchor)
+    rows = probe.probe_features(feats, svm, encoder_id=encoder_id)
+    test = {r["probe"]: r["accuracy"] for r in rows if r["label_frac"] == 100 and r["draw"] == 0}
+    return {
+        "encoder_id": encoder_id,
+        "val_knn": knn.val_knn(feats["train_x"], feats["train_y"]),
+        "collapse_flagged": bool(check.flagged), "collapse_reasons": check.reasons,
+        "test_100pct_draw0": test, "svm_frozen": None if svm is None else svm.frozen,
+        "probe_rows": rows,
+    }
+
+
+def run_fixed_view(profile: str = "full", epochs: int | None = None, overrides: dict[str, Any] | None = None,
+                   log: Callable[[str], None] = print) -> dict:
+    """Spec §6.4: B-S-100-s0 with the configured (tuned) settings at E = 100, on the pool and
+    on fresh views. The switch reads the validation k-NN only; the test probes give the Δ."""
+    from mo433 import extract, probe, stages, train
+
+    cfg_epochs = config_mod.load_config("B", "S", profile).epochs
+    epochs = epochs if epochs is not None else cfg_epochs
+    ov = dict(overrides or {})
+    main_eligible = not ov and epochs == cfg_epochs and frozen_configs_identical()
+    root = paths.tuning_dir(profile) / "fixed_view"
+    tuning_pool = root / "pool"
+    main_dir = paths.run_dir(MAIN_POOL_RUN, profile)
+    stage = f"train/{MAIN_POOL_RUN}"
+
+    # A pool twin trained before the freeze becomes the main run once the frozen configs match it.
+    hash_file = tuning_pool / "configs.sha256"
+    if (main_eligible and (tuning_pool / SUMMARY_NAME).exists() and not main_dir.exists()
+            and hash_file.exists() and hash_file.read_text().strip() == configs_hash()):
+        log(f"[tune fixed-view] promoting the pool twin to main run {MAIN_POOL_RUN}")
+        shutil.copytree(tuning_pool, main_dir)
+        stages.run_stage(stage, lambda: None, profile=profile)
+
+    twins = {}
+    for kind, otf in (("pool", False), ("on_the_fly", True)):
+        if kind == "pool" and main_eligible:
+            rd, eid = main_dir, MAIN_POOL_RUN
+            stages.run_stage(stage, lambda: train.train_run("B", "S", 100, 0, profile=profile, run_dir=rd, log=log),
+                             profile=profile)
+            stages.run_stage(f"extract/{eid}", lambda: extract.extract(eid, profile), profile=profile)
+            feats = probe.load_features(eid, profile)
+        else:
+            rd = tuning_pool if kind == "pool" else root / "otf"
+            eid = f"{MAIN_POOL_RUN}-fv-{'pool' if kind == 'pool' else 'otf'}"
+            if not (rd / SUMMARY_NAME).exists():
+                (paths.features_dir(profile) / f"{eid}.npz").unlink(missing_ok=True)
+            train.train_run("B", "S", 100, 0, profile=profile, overrides=ov or None, run_dir=rd, epochs=epochs,
+                            on_the_fly=otf, log=log)
+            if kind == "pool":
+                hash_file.write_text(configs_hash() + "\n")
+            feats = _twin_features(rd, eid, profile)
+        twins[kind] = {**_evaluate_twin(feats, eid, profile), "run_dir": str(rd)}
+        log(f"[tune fixed-view] {kind}: val_knn={twins[kind]['val_knn']:.4f} test={twins[kind]['test_100pct_draw0']}")
+
+    pool, otf_ = twins["pool"], twins["on_the_fly"]
+    delta_val = 100 * (otf_["val_knn"] - pool["val_knn"])
+    summary = {
+        "profile": profile, "epochs": epochs, "overrides": ov, "configs_sha256": configs_hash(),
+        "pool_twin_is_main_run": main_eligible,
+        "pool": pool, "on_the_fly": otf_,
+        "delta_val_pp": delta_val,
+        "switch_rule": f"on-the-fly beats the pool by > {SWITCH_PP} pp validation k-NN (pre-registered)",
+        "switch": delta_val > SWITCH_PP,
+        "delta_test_pp": {p: 100 * (otf_["test_100pct_draw0"][p] - pool["test_100pct_draw0"][p])
+                          for p in pool["test_100pct_draw0"]},
+    }
+    _publish(profile, "fixed_view.json", summary)
+    log(f"[tune fixed-view] Δval={delta_val:+.2f} pp -> switch={summary['switch']}; Δtest={summary['delta_test_pp']}")
+    return summary
+
+
+SUMMARY_NAME = "summary.json"
+
+
+# ---------------------------------------------------------------- --apply
+
+
+def _set_yaml_keys(path: Path, values: dict[str, Any], section: str | None = None) -> None:
+    """Set top-level (or ``section:``-nested) scalar keys in place, keeping comments and layout."""
+    from mo433.probe import _yaml_scalar
+
+    lines = path.read_text().splitlines(keepends=True)
+    inside, done = section is None, set()
+    for i, line in enumerate(lines):
+        if section is not None:
+            if re.match(rf"^{section}:", line):
+                inside = True
+                continue
+            if inside and re.match(r"^\S", line):
+                break
+        if not inside:
+            continue
+        pat = r"^(\s+)(\w+):(\s*)(\S+)(.*)$" if section else r"^()(\w+):(\s*)(\S+)(.*)$"
+        m = re.match(pat, line.rstrip("\n"))
+        if m and m.group(2) in values:
+            indent, key, sp, _old, rest = m.groups()
+            v = values[key]
+            lines[i] = f"{indent}{key}:{sp or ' '}{v if isinstance(v, int) else _yaml_scalar(v)}{rest}\n"
+            done.add(key)
+    if set(values) - done:
+        raise ValueError(f"{path}: keys not found: {sorted(set(values) - done)}")
+    path.write_text("".join(lines))
+
+
+def _summary(profile: str, name: str) -> dict:
+    for p in (paths.tuning_dir(profile) / name, REPO_TUNING_DIR / name):
+        if p.exists():
+            return json.loads(p.read_text())
+    raise SystemExit(f"no {name} under {paths.tuning_dir(profile)} or {REPO_TUNING_DIR}; run the study first")
+
+
+def apply_winners(study: str, profile: str = "full", configs_dir: Path | None = None,
+                  log: Callable[[str], None] = print) -> dict:
+    """Write a study's winner into ``configs/`` (never tags ``configs-frozen``)."""
+    cfg = Path(configs_dir) if configs_dir is not None else paths.CONFIGS_DIR
+    if study == "optuna":
+        w = _summary(profile, f"{STUDY_NAME}.json").get("winner")
+        if not w:
+            raise SystemExit("optuna study has no winner (every complete trial collapsed?)")
+        p = w["params"]
+        values = {"lr": float(p["lr"]), "weight_decay": float(p["weight_decay"]), "warmup_epochs": int(p["warmup_epochs"])}
+        _set_yaml_keys(cfg / "base.yaml", values, section="optimizer")
+        log(f"[tune optuna --apply] configs/base.yaml optimizer <- {values}")
+        return values
+    if study == "grid":
+        applied = {}
+        for row in config_mod.ROWS:
+            try:
+                width = int(_summary(profile, f"grid_{row}.json")["winner"])
+            except SystemExit:
+                log(f"[tune grid --apply] no grid_{row}.json: {row} unchanged")
+                continue
+            for size in config_mod.SIZES:  # L reuses S's winner (spec §6.2)
+                _set_yaml_keys(cfg / f"{row}-{size}.yaml", {"head_width": width})
+            applied[row] = width
+            log(f"[tune grid --apply] configs/{row}-{{S,L}}.yaml head_width <- {width}")
+        return applied
+    raise SystemExit(f"tune {study} --apply: nothing to write into configs/ (see tuning/{study.replace('-', '_')}.json)")
+
+
 # ---------------------------------------------------------------- CLI
 
 
@@ -384,12 +718,13 @@ def run_cli(study: str, *, profile: str, n_trials: int | None = None, epochs: in
             overrides: dict[str, Any] | None = None) -> None:
     if apply:
         apply_winners(study, profile=profile)
-        return
-    if study == "optuna":
+    elif study == "optuna":
         run_optuna(profile=profile, n_trials=n_trials, epochs=epochs, overrides=overrides)
+    elif study == "grid":
+        run_grid(profile=profile, rows=rows, epochs=epochs, overrides=overrides)
+    elif study == "lars":
+        run_lars(profile=profile, epochs=epochs, overrides=overrides)
+    elif study == "fixed-view":
+        run_fixed_view(profile=profile, epochs=epochs, overrides=overrides)
     else:
         raise NotImplementedError(f"tune {study}")
-
-
-def apply_winners(study: str, profile: str = "full", configs_dir: Path | None = None) -> dict:
-    raise NotImplementedError(f"tune {study} --apply")
