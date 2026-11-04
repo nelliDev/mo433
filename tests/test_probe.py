@@ -142,3 +142,32 @@ def test_select_svm_refuses_once_a_c_encoder_has_been_probed(mo433_root, configs
     with pytest.raises(probe.SvmSelectionRefused, match="C-S-100-s0"):
         probe.select_svm(configs_dir=configs_dir, splits_dir=splits_dir, n_jobs=1, **SMALL_GRID)
     assert (configs_dir / "base.yaml").read_text() == before
+
+
+@pytest.mark.invariant
+def test_encoder_weights_unchanged_across_extract_and_probe(mo433_root, splits_dir):
+    """Spec §9 invariant: a trained run's weights on disk are byte-identical after extract + probe."""
+    import hashlib
+
+    import torch
+
+    from mo433 import extract, paths
+    from mo433.encoders import save_final_backbone
+    from mo433.students import build_student
+
+    rd = paths.run_dir("B-S-100-s0")
+    save_final_backbone(build_student("S", seed=3), rd)
+
+    def digest():
+        return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(rd.iterdir())}
+
+    def fake_split(split):
+        g = torch.Generator().manual_seed({"train": 0, "test": 1}[split])
+        n = {"train": N_TRAIN, "test": N_TEST}[split]
+        return torch.randint(0, 256, (n, 96, 96, 3), dtype=torch.uint8, generator=g), torch.arange(n) // (n // N_CLASSES)
+
+    before = digest()
+    extract.extract("B-S-100-s0", device="cpu", load_split=fake_split)
+    rows = probe.probe_encoder("B-S-100-s0", None, splits_dir=splits_dir, n_jobs=1)
+    assert len(rows) == 12
+    assert digest() == before

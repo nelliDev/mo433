@@ -98,30 +98,78 @@ def _train_args(p: argparse.ArgumentParser) -> None:
                    help="validation k-NN every N epochs (monitoring only; default 1, 0 = never)")
 
 
+def _train_one(ctx: Context, row: str, size: str, frac: int, seed: int, *, on_the_fly: bool = False,
+               overrides: dict | None = None) -> str:
+    """One run through its ``train/<name>`` stage (skipped when done); returns ``name``."""
+    from mo433 import paths, train
+
+    rid = config_mod.run_id(row, size, frac, seed)
+    # The fixed-view control's on-the-fly twin gets its own run dir and stage name, so it
+    # never collides with (or resumes from) the pool run of the same id.
+    name = f"{rid}-otf" if on_the_fly else rid
+
+    def build() -> None:
+        train.train_run(
+            row, size, frac, seed, profile=ctx.profile, overrides=overrides,
+            run_dir=paths.run_dir(name, ctx.profile), on_the_fly=on_the_fly, fresh=ctx.force,
+        )
+
+    ctx.run_stage(f"train/{name}", build)
+    return name
+
+
+def _train_overrides(args: argparse.Namespace) -> dict | None:
+    ov = {k: getattr(args, k, None) for k in ("knn_every", "num_workers")}
+    return {k: v for k, v in ov.items() if v is not None} or None
+
+
 @command("train", help="one run of row B or C", add_args=_train_args)
 def _train(ctx: Context, args: argparse.Namespace) -> None:
     if args.on_the_fly and args.row != "B":
         raise SystemExit("--on-the-fly applies to row B only")
-    from mo433 import paths, train
-
-    rid = config_mod.run_id(args.row, args.size, args.frac, args.seed)
-    # The fixed-view control's on-the-fly twin gets its own run dir and stage name, so it
-    # never collides with (or resumes from) the pool run of the same id.
-    name = f"{rid}-otf" if args.on_the_fly else rid
-    overrides = {"knn_every": args.knn_every} if args.knn_every is not None else None
-
-    def build() -> None:
-        train.train_run(
-            args.row, args.size, args.frac, args.seed, profile=ctx.profile, overrides=overrides,
-            run_dir=paths.run_dir(name, ctx.profile), on_the_fly=args.on_the_fly, fresh=ctx.force,
-        )
-
-    ctx.run_stage(f"train/{name}", build)
+    _train_one(ctx, args.row, args.size, args.frac, args.seed, on_the_fly=args.on_the_fly,
+               overrides=_train_overrides(args))
 
 
-@command("train-all", help="all 20 reported runs in week-3 order (spec §8)")
+def _train_all_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--only", choices=config_mod.SIZES, default=None, help="only the runs of this student size")
+    p.add_argument("--dry-list", action="store_true", help="print the run order (with done/todo) and exit")
+    p.add_argument("--knn-every", type=int, default=None,
+                   help="validation k-NN every N epochs (monitoring only; default 1, 0 = never)")
+    p.add_argument("--num-workers", type=int, default=None, help="data-loader workers per run (default: loop default)")
+
+
+def train_all_runs(only: str | None = None) -> list[tuple[str, str, int, int]]:
+    """The reported runs in week-3 order (spec §8), optionally one student size only."""
+    return [r for r in config_mod.reported_runs() if only is None or r[1] == only]
+
+
+@command("train-all", help="all 20 reported runs in week-3 order (spec §8), each extracted as it lands",
+         add_args=_train_all_args)
 def _train_all(ctx: Context, args: argparse.Namespace) -> None:
-    raise NotImplementedError("train-all")
+    runs = train_all_runs(getattr(args, "only", None))
+    if getattr(args, "dry_list", False):
+        for i, r in enumerate(runs, 1):
+            rid = config_mod.run_id(*r)
+            print(f"{i:2d} {rid} {'done' if ctx.is_done(f'train/{rid}') else 'todo'}")
+        return
+    from mo433 import extract, train
+
+    diverged = []
+    for row, size, frac, seed in runs:
+        try:
+            rid = _train_one(ctx, row, size, frac, seed, overrides=_train_overrides(args))
+        except train.TrainingDiverged as e:
+            # One diverged run must not block the rest of an unattended week-3 queue. It keeps
+            # no marker (rerun slot, spec §10) and is reported at the end. Other errors stop.
+            print(f"[train-all] {e}; continuing with the next run")
+            diverged.append(config_mod.run_id(row, size, frac, seed))
+            continue
+        # Features as soon as the run lands, so probes can start (spec §10 W3). Probing stays a
+        # separate command: SVM C/gamma are frozen only after B-S-100-s0.
+        ctx.run_stage(f"extract/{rid}", lambda e=rid: extract.extract(e, ctx.profile))
+    if diverged:
+        raise SystemExit(f"train-all: diverged (no .done marker; rerun them): {', '.join(diverged)}")
 
 
 # ---------------------------------------------------------------- evaluation and reporting
@@ -300,14 +348,21 @@ def _report_args(p: argparse.ArgumentParser) -> None:
     )
 
 
+SMOKE_REPORT_ROOT = "report-repo"  # under the smoke artifact root: stands in for the repo
+
+
 @command("report", help="results.csv -> LaTeX tables, macros and figures (spec §9)", add_args=_report_args)
 def _report(ctx: Context, args: argparse.Namespace) -> None:
     # Committed outputs: always regenerated, no .done marker (like `splits`). Never imports torch.
     from pathlib import Path
 
-    from mo433 import report
+    from mo433 import paths, report
 
     root = Path(args.repo_root) if getattr(args, "repo_root", None) else None
+    if root is None and ctx.profile == "smoke":
+        # Smoke results must never overwrite the committed results.csv / report/.
+        root = paths.artifacts_root("smoke") / SMOKE_REPORT_ROOT
+        print(f"smoke profile: report inputs and outputs under {root}")
     inputs = report.Inputs.committed(root)
     if not getattr(args, "no_sync", False):
         report.sync_inputs(ctx.profile, inputs)
@@ -317,14 +372,18 @@ def _report(ctx: Context, args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------- tuning
 
 
-TUNE_STUDIES = ("optuna", "grid", "fixed-view", "lars")
+TUNE_STUDIES = ("optuna", "grid", "fixed-view", "lars", "dryrun")
 
 
 def _tune_args(p: argparse.ArgumentParser) -> None:
-    p.add_argument("study", choices=TUNE_STUDIES)
+    p.add_argument("study", choices=TUNE_STUDIES,
+                   help="dryrun = the W1 5-epoch full-scale B-S + C-S run measuring the overhead factor (spec §8, §10)")
     p.add_argument("--n-trials", type=int, default=None, help="optuna: finished trials to reach (default 16; smoke 2)")
-    p.add_argument("--epochs", type=int, default=None, help="epochs per trial (default: spec value; smoke: profile epochs)")
+    p.add_argument("--epochs", type=int, default=None,
+                   help="epochs per trial (default: spec value, dryrun 5; smoke: profile epochs)")
     p.add_argument("--rows", nargs="+", choices=config_mod.ROWS, default=None, help="grid: rows (default B C)")
+    p.add_argument("--sizes", nargs="+", choices=config_mod.SIZES, default=None,
+                   help="dryrun: student sizes to measure (default S; L is then projected from S)")
     p.add_argument("--num-workers", type=int, default=None, help="data-loader workers per run (default: loop default)")
     p.add_argument("--apply", action="store_true",
                    help="write the study's winner into configs/ (optuna: base.yaml optimizer; grid: per-row head_width) "
@@ -333,22 +392,73 @@ def _tune_args(p: argparse.ArgumentParser) -> None:
 
 @command("tune", help="opt-in tuning studies (spec §6)", add_args=_tune_args)
 def _tune(ctx: Context, args: argparse.Namespace) -> None:
+    overrides = {"num_workers": args.num_workers} if args.num_workers is not None else None
+    if args.study == "dryrun":
+        if args.apply:
+            raise SystemExit("tune dryrun --apply: the dry run has nothing to write into configs/")
+        from mo433 import dryrun
+
+        dryrun.run_dryrun(ctx.profile, epochs=args.epochs, sizes=getattr(args, "sizes", None) or ("S",),
+                          overrides=overrides, force=ctx.force)
+        return
     from mo433 import tune
 
     tune.run_cli(args.study, profile=ctx.profile, n_trials=args.n_trials, epochs=args.epochs,
-                 rows=args.rows, apply=args.apply, force=ctx.force,
-                 overrides={"num_workers": args.num_workers} if args.num_workers is not None else None)
+                 rows=args.rows, apply=args.apply, force=ctx.force, overrides=overrides)
 
 
 # ---------------------------------------------------------------- everything
 
-PIPELINE = ("splits", "pool", "teacher", "train-all", "extract", "probe", "diagnose", "measure", "report")
+@command("invariants", help="the spec §9 invariant tests (pytest -m invariant); step 2 of `all`")
+def _invariants(ctx: Context, args: argparse.Namespace) -> None:
+    # Cheap (seconds) and never marked done: they guard the code that is about to run.
+    import importlib.util
+    import os
+    import subprocess
+
+    from mo433 import paths
+
+    if importlib.util.find_spec("pytest") is None:
+        raise SystemExit("mo433 invariants: pytest is not installed (uv sync installs the dev group)")
+    env = {**os.environ, "MO433_N_JOBS": os.environ.get("MO433_N_JOBS", "2")}
+    cmd = [sys.executable, "-m", "pytest", "-q", "-m", "invariant", "-p", "no:cacheprovider", str(paths.REPO_ROOT / "tests")]
+    print(f"[invariants] {' '.join(cmd[2:])}", flush=True)
+    rc = subprocess.run(cmd, cwd=paths.REPO_ROOT, env=env).returncode
+    if rc != 0:
+        raise SystemExit(f"mo433 invariants: invariant tests failed (pytest exit code {rc})")
 
 
-@command("all", help="splits -> report from the frozen configs")
+PIPELINE = (
+    "splits", "invariants", "pool", "teacher", "train-all", "extract", "probe", "diagnose", "measure", "report",
+)
+# Smoke evaluates one encoder per row (the four t-SNE panels): every code path, a fraction of
+# the probe time. train-all and extract still cover all 20 runs (and both sizes / fractions).
+SMOKE_EVAL_ENCODERS = ("A-S-s0", "B-S-100-s0", "C-S-100-s0", "D")
+
+
+def _pipeline_argv(ctx: Context, name: str) -> list[str]:
+    if name in ("probe", "diagnose") and ctx.profile == "smoke":
+        # Probe C/gamma are null until `probe --select-svm` on B-S-100-s0: smoke uses the
+        # provisional SVM settings (rows marked svm_params_frozen=False, never .done).
+        return [name, "--provisional-svm", *(x for e in SMOKE_EVAL_ENCODERS for x in ("--encoder", e))]
+    return [name]
+
+
+@command("all", help="splits -> report from the frozen configs (smoke: provisional SVMs, 4 probed encoders)")
 def _all(ctx: Context, args: argparse.Namespace) -> None:
+    parser = build_parser()
     for name in PIPELINE:
-        COMMANDS[name].handler(ctx, argparse.Namespace(select_svm=False))
+        if name == "probe" and ctx.profile != "smoke":
+            from mo433 import probe
+
+            if probe.svm_params(ctx.config().probe) is None:
+                raise SystemExit(
+                    "mo433 all: stopped before `probe`: SVM C/gamma are null in configs/base.yaml. Everything up "
+                    "to `extract` is done. Run `mo433 probe --select-svm` (5-fold CV on B-S-100-s0, spec §7.2), "
+                    "commit configs/base.yaml, then rerun `mo433 all` (finished stages are skipped)."
+                )
+        sub = parser.parse_args(_pipeline_argv(ctx, name))
+        COMMANDS[name].handler(ctx, sub)
 
 
 # ---------------------------------------------------------------- entry point

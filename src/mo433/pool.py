@@ -227,10 +227,16 @@ def build_pool(
     return final
 
 
-def run(profile: str = "full", force: bool = False, num_workers: int = 14) -> Path:
-    """`mo433 pool`: build the profile's pool (N, K from the config) under ``paths.pool_dir``."""
+def run(profile: str = "full", force: bool = False, num_workers: int | None = None) -> Path:
+    """`mo433 pool`: build the profile's pool (N, K from the config) under ``paths.pool_dir``.
+
+    ``num_workers`` defaults to ``$MO433_NUM_WORKERS`` or 14."""
+    import os
+
     from mo433 import config, paths, stages
 
+    if num_workers is None:
+        num_workers = int(os.environ.get("MO433_NUM_WORKERS", "14"))
     cfg = config.load_config(profile=profile)
     out_dir = paths.pool_dir(profile)
 

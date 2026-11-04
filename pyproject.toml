@@ -44,4 +44,6 @@ markers = [
     "data: needs the STL-10 binaries under $MO433_DATA (default data/)",
     "gpu: needs a CUDA GPU",
     "weights: needs pretrained weights (timm/HF cache or network)",
+    "slow: minutes-long end-to-end test (deselect with -m 'not slow')",
+    "invariant: spec §9 invariant tests, run by `mo433 invariants` inside `mo433 all`",
 ]

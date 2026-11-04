@@ -1,0 +1,75 @@
+"""`mo433 all` (spec §9): the pipeline order, the SVM-parameter policy, and the smoke run end to end."""
+
+import importlib.util
+
+import pytest
+
+from mo433 import cli
+from mo433.cli import main
+
+
+@pytest.fixture
+def recorded(monkeypatch, mo433_root):
+    """Replace every pipeline handler with a recorder of (name, parsed args)."""
+    calls = []
+    for name in cli.PIPELINE:
+        cmd = cli.COMMANDS[name]
+
+        def rec(ctx, args, name=name):
+            calls.append((name, ctx.profile, args))
+
+        monkeypatch.setitem(cli.COMMANDS, name, cmd.__class__(name, cmd.help, rec, cmd.add_args))
+    return calls
+
+
+def test_pipeline_runs_splits_to_report_with_invariants_before_any_gpu_stage():
+    assert cli.PIPELINE == (
+        "splits", "invariants", "pool", "teacher", "train-all", "extract", "probe", "diagnose", "measure", "report",
+    )
+
+
+def test_smoke_all_runs_every_stage_and_probes_with_provisional_svms(recorded):
+    assert main(["all", "--profile", "smoke"]) == 0
+    assert [c[0] for c in recorded] == list(cli.PIPELINE)
+    assert {c[1] for c in recorded} == {"smoke"}
+    args = {name: a for name, _, a in recorded}
+    for stage in ("probe", "diagnose"):
+        assert args[stage].provisional_svm is True
+        assert args[stage].encoder == ["A-S-s0", "B-S-100-s0", "C-S-100-s0", "D"]
+    assert args["probe"].select_svm is False
+    assert args["train-all"].only is None and args["train-all"].dry_list is False
+
+
+def test_full_all_stops_before_probing_while_svm_params_are_null(recorded, capsys):
+    from mo433 import config
+
+    assert config.load_config().probe.linear_c is None  # the committed state until --select-svm
+    with pytest.raises(SystemExit, match="--select-svm"):
+        main(["all"])
+    assert [c[0] for c in recorded] == ["splits", "invariants", "pool", "teacher", "train-all", "extract"]
+
+
+def _row_c_available() -> bool:
+    spec = importlib.util.find_spec("mo433.train_c")
+    return spec is not None and "register_objective" in open(spec.origin).read()
+
+
+@pytest.mark.slow
+@pytest.mark.data
+@pytest.mark.gpu
+@pytest.mark.weights
+@pytest.mark.skipif(not _row_c_available(), reason="row C (mo433.train_c, #20) not merged yet")
+def test_smoke_all_end_to_end(tmp_path, monkeypatch):
+    """The real thing: every stage on the smoke profile, invariant tests included (a few minutes)."""
+    root = tmp_path / "artifacts-smoke"
+    monkeypatch.setenv("MO433_ROOT", str(root))
+    monkeypatch.setenv("MO433_NUM_WORKERS", "2")
+    assert main(["all", "--profile", "smoke"]) == 0
+    from mo433 import config, paths, stages
+
+    for r in config.reported_runs():
+        assert stages.is_done(f"train/{config.run_id(*r)}", "smoke")
+    assert (paths.results_dir("smoke") / "results.csv").exists()
+    assert (root / "report-repo" / "report" / "generated").is_dir()
+    # A rerun skips every finished training stage.
+    assert stages.is_done("pool", "smoke") and stages.is_done("teacher/cache", "smoke")
