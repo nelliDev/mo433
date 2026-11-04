@@ -6,6 +6,7 @@ import pytest
 from mo433 import paths, splits
 
 
+@pytest.mark.invariant
 @pytest.mark.data
 def test_regenerating_matches_committed_splits_byte_for_byte(tmp_path):
     splits.write_splits(out_dir=tmp_path)

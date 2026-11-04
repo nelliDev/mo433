@@ -11,6 +11,7 @@ def _flat(m):
     return torch.cat([p.detach().flatten() for p in m.parameters()])
 
 
+@pytest.mark.invariant
 @pytest.mark.parametrize("encoder_id, dim", [("A-S-s0", 192), ("A-L-s1", 384)])
 def test_row_a_returns_frozen_eval_flat_vector_of_stated_dim(encoder_id, dim):
     enc = load_encoder(encoder_id)

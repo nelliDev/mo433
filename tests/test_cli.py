@@ -30,8 +30,14 @@ def test_console_script_is_installed():
     assert "train-all" in proc.stdout
 
 
-def test_unimplemented_stage_exits_nonzero_with_message(capsys):
-    assert main(["train-all"]) == 3
+def test_unimplemented_stage_exits_nonzero_with_message(capsys, monkeypatch):
+    from mo433 import cli
+
+    def stub(ctx, args):
+        raise NotImplementedError("measure")
+
+    monkeypatch.setitem(cli.COMMANDS, "measure", cli.COMMANDS["measure"].__class__("measure", "", stub, None))
+    assert main(["measure"]) == 3
     assert "not implemented" in capsys.readouterr().err
 
 

@@ -175,6 +175,8 @@ def resolve_settings(
         head_width=cfg.head_width, lr=cfg.optimizer.lr, weight_decay=cfg.optimizer.weight_decay,
         warmup_epochs=cfg.optimizer.warmup_epochs, betas=tuple(cfg.optimizer.betas), on_the_fly=on_the_fly,
         device="cuda" if torch.cuda.is_available() else "cpu",
+        # $MO433_NUM_WORKERS caps loader workers (tests, `all --profile smoke` on a shared box).
+        num_workers=int(os.environ.get("MO433_NUM_WORKERS", RunSettings.num_workers)),
     )
     s = RunSettings(**{**base, **overrides})
     if s.steps_per_epoch < 1:

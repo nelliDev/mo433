@@ -16,6 +16,7 @@ def test_normalize_maps_uint8_nhwc_to_imagenet_normalized_nchw():
     assert torch.allclose(x[1, :, 0, 0], torch.tensor([2.2489, 2.4286, 2.6400]), atol=1e-4)
 
 
+@pytest.mark.invariant
 def test_normalize_is_deterministic():
     u8 = torch.randint(0, 256, (4, 96, 96, 3), dtype=torch.uint8)
     assert torch.equal(normalize(u8), normalize(u8.clone()))
