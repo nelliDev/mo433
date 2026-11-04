@@ -119,3 +119,78 @@ def test_interrupted_trial_is_retried_with_the_same_params_and_resumes(tiny_pool
     assert done[0]["params"] == summary["trials"][0]["params"]
     assert any("resumed at epoch 1" in line for line in lines)
     assert isinstance(done[0]["collapse_flagged"], bool)
+
+
+# ---------------------------------------------------------------- grid, LARS, fixed-view, --apply
+
+GRID_TINY = {k: v for k, v in TINY.items() if k != "head_width"}
+
+
+def _settings(run_dir):
+    return json.loads((run_dir / "config.json").read_text())["settings"]
+
+
+@pytest.mark.data
+def test_smoke_grid_uses_the_optuna_winner_and_applies_the_tie_rule(tiny_pool, mo433_root):
+    winner = {"number": 3, "params": {"lr": 2e-3, "weight_decay": 0.1, "warmup_epochs": 1}, "value": 0.7}
+    (mo433_root / "tuning").mkdir(parents=True)
+    (mo433_root / "tuning" / "optuna_b.json").write_text(json.dumps({"winner": winner}))
+
+    out = tune.run_grid(profile="smoke", rows=["B"], epochs=1, overrides=GRID_TINY)["B"]
+
+    assert sorted((p["width"], p["seed"]) for p in out["points"]) == [
+        (w, s) for w in (1024, 2048, 4096) for s in (0, 1)
+    ]
+    s = _settings(mo433_root / "tuning" / "grid" / "B-w4096-s1")
+    assert (s["head_width"], s["seed"], s["lr"], s["weight_decay"], s["warmup_epochs"]) == (4096, 1, 2e-3, 0.1, 1)
+    assert out["optimizer_source"] == "optuna winner (trial 3)"
+    assert out["tie_rule"]["winner"] == out["winner"] in (1024, 2048, 4096)
+    assert json.loads((mo433_root / "tuning" / "grid_B.json").read_text())["winner"] == out["winner"]
+
+
+@pytest.mark.data
+def test_smoke_lars_runs_six_configs_with_linearly_scaled_lr(tiny_pool, mo433_root):
+    out = tune.run_lars(profile="smoke", epochs=1, overrides=GRID_TINY)
+
+    assert sorted((t["base_lr"], t["weight_decay"]) for t in out["trials"]) == [
+        (lr, wd) for lr in (0.2, 1.0, 2.0) for wd in (1e-6, 1e-4)
+    ]
+    t = next(t for t in out["trials"] if t["base_lr"] == 1.0 and t["weight_decay"] == 1e-4)
+    s = _settings(mo433_root / "tuning" / "lars" / t["name"])
+    assert s["optimizer"] == "lars" and s["lr"] == pytest.approx(1.0 * 16 / 256) and s["head_width"] == 2048
+
+
+@pytest.mark.data
+def test_smoke_fixed_view_scores_both_twins_on_validation_and_keeps_the_test_delta(tiny_pool, mo433_root):
+    out = tune.run_fixed_view(profile="smoke", epochs=1, overrides=TINY)
+
+    pool, otf = out["pool"], out["on_the_fly"]
+    assert 0 <= pool["val_knn"] <= 1 and 0 <= otf["val_knn"] <= 1
+    assert out["delta_val_pp"] == pytest.approx(100 * (otf["val_knn"] - pool["val_knn"]))
+    assert out["switch"] == (out["delta_val_pp"] > 2.0)
+    assert "knn" in out["delta_test_pp"]
+    assert _settings(mo433_root / "tuning" / "fixed_view" / "otf")["on_the_fly"] is True
+    assert out["pool_twin_is_main_run"] is False  # overrides given: never the main run
+
+
+def test_apply_writes_the_winners_into_the_configs(tmp_path, mo433_root):
+    import shutil
+
+    cfg = tmp_path / "configs"
+    shutil.copytree(paths.CONFIGS_DIR, cfg)
+    t = mo433_root / "tuning"
+    t.mkdir(parents=True)
+    (t / "optuna_b.json").write_text(json.dumps(
+        {"winner": {"number": 5, "params": {"lr": 0.0021, "weight_decay": 0.031, "warmup_epochs": 4}, "value": 0.7}}))
+    (t / "grid_B.json").write_text(json.dumps({"winner": 4096}))
+    (t / "grid_C.json").write_text(json.dumps({"winner": 1024}))
+
+    tune.apply_winners("optuna", profile="smoke", configs_dir=cfg)
+    tune.apply_winners("grid", profile="smoke", configs_dir=cfg)
+
+    for size in ("S", "L"):
+        b = config_mod.load_config("B", size, configs_dir=cfg)
+        c = config_mod.load_config("C", size, configs_dir=cfg)
+        assert (b.optimizer.lr, b.optimizer.weight_decay, b.optimizer.warmup_epochs) == (0.0021, 0.031, 4)
+        assert (b.head_width, c.head_width) == (4096, 1024)
+    assert "# Shared settings" in (cfg / "base.yaml").read_text()  # comments kept
