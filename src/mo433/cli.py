@@ -161,9 +161,31 @@ def _svm(ctx: Context, args: argparse.Namespace):
     return svm
 
 
-@command("extract", help="frozen features for every encoder (spec §7.1)")
+EXTRACT_ROWS = ("A", "B", "C", "D")
+
+
+def _extract_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument("encoder_ids", nargs="*", metavar="ENCODER_ID", help="e.g. A-S-s0 B-L-050-s1")
+    p.add_argument("--rows", nargs="+", choices=EXTRACT_ROWS, help="every encoder of these rows")
+
+
+@command("extract", help="frozen features for every encoder (spec §7.1)", add_args=_extract_args)
 def _extract(ctx: Context, args: argparse.Namespace) -> None:
-    raise NotImplementedError("extract")
+    from mo433 import encoders, extract
+
+    ids = list(getattr(args, "encoder_ids", None) or [])
+    rows = getattr(args, "rows", None)
+    if not ids and not rows:  # `mo433 all`, or bare `mo433 extract`: every encoder
+        rows = [r for r in EXTRACT_ROWS if r in encoders.ROW_IDS]
+    missing_rows = [r for r in rows or [] if r not in encoders.ROW_IDS]
+    if missing_rows:
+        raise NotImplementedError(f"extract: row {', '.join(missing_rows)} has no registered encoders yet")
+    ids += encoders.encoder_ids(rows or [])
+    unknown = [i for i in ids if not encoders.is_registered(i)]
+    if unknown:
+        raise SystemExit(f"mo433 extract: unknown encoder id(s): {', '.join(unknown)}")
+    for encoder_id in dict.fromkeys(ids):
+        ctx.run_stage(f"extract/{encoder_id}", lambda e=encoder_id: extract.extract(e, ctx.profile))
 
 
 @command("probe", help="k-NN / linear SVM / RBF SVM probes (spec §7.2)", add_args=_probe_args)
