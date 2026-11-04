@@ -70,7 +70,9 @@ def _pool(ctx: Context, args: argparse.Namespace) -> None:
 
 @command("teacher", help="teacher sanity check and teacher-feature cache (spec §3, §4.1)")
 def _teacher(ctx: Context, args: argparse.Namespace) -> None:
-    raise NotImplementedError("teacher")
+    from mo433 import teacher
+
+    ctx.run_stage("teacher/cache", lambda: teacher.build_teacher_cache(ctx.profile))
 
 
 # ---------------------------------------------------------------- training
