@@ -66,3 +66,31 @@ def test_global_flags_work_before_or_after_subcommand(argv, monkeypatch):
     monkeypatch.setitem(cli.COMMANDS, "tune", cli.COMMANDS["tune"].__class__("tune", "", spy, cli._tune_args))
     assert main(argv) == 0
     assert seen["ctx"] == cli.Context(profile="smoke", force=True)
+
+
+def _spy_extract(monkeypatch):
+    from mo433 import extract
+
+    calls = []
+    monkeypatch.setattr(extract, "extract", lambda encoder_id, profile="full", **kw: calls.append((encoder_id, profile)))
+    return calls
+
+
+def test_extract_rows_runs_one_stage_per_encoder(mo433_root, monkeypatch):
+    from mo433.stages import is_done
+
+    calls = _spy_extract(monkeypatch)
+    assert main(["extract", "--rows", "A"]) == 0
+    assert [c[0] for c in calls] == ["A-S-s0", "A-S-s1", "A-S-s2", "A-L-s0", "A-L-s1"]
+    assert is_done("extract/A-L-s1")
+    assert main(["extract", "A-S-s0", "A-L-s1"]) == 0  # done: skipped
+    assert len(calls) == 5
+    assert main(["extract", "A-S-s0", "--force", "--profile", "smoke"]) == 0
+    assert calls[-1] == ("A-S-s0", "smoke")
+
+
+def test_extract_rejects_unknown_ids(mo433_root, monkeypatch):
+    calls = _spy_extract(monkeypatch)
+    with pytest.raises(SystemExit):
+        main(["extract", "A-M-s0"])
+    assert calls == []
