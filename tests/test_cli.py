@@ -31,7 +31,7 @@ def test_console_script_is_installed():
 
 
 def test_unimplemented_stage_exits_nonzero_with_message(capsys):
-    assert main(["measure"]) == 3
+    assert main(["train-all"]) == 3
     assert "not implemented" in capsys.readouterr().err
 
 

@@ -16,7 +16,7 @@ Encoder ids
 - Rows B/C: ``{B,C}-{S,L}-{frac:03d}-s{seed}`` (the run id, spec §8). Loads
   ``$MO433_ROOT/runs/<run_id>/final_backbone.pt``, a ResNet96 ``state_dict`` written by the
   trainer with ``save_final_backbone(net, run_dir)``.
-- Row D: registered by the teacher module (not yet).
+- Row D: ``D``, the frozen DINO ViT-S/16, registered by ``mo433.teacher``.
 
 Registering a new kind of encoder
 ---------------------------------
@@ -51,7 +51,7 @@ from mo433.students import WIDTHS, ResNet96, build_student
 FINAL_BACKBONE = "final_backbone.pt"
 
 # Modules that call ``register`` at import time; imported on the first ``load_encoder``.
-PROVIDERS: tuple[str, ...] = ()
+PROVIDERS: tuple[str, ...] = ("mo433.teacher",)
 
 
 class UnknownEncoder(KeyError):

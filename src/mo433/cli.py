@@ -72,7 +72,13 @@ def _pool(ctx: Context, args: argparse.Namespace) -> None:
 
 @command("teacher", help="teacher sanity check and teacher-feature cache (spec §3, §4.1)")
 def _teacher(ctx: Context, args: argparse.Namespace) -> None:
-    raise NotImplementedError("teacher")
+    from mo433 import extract, teacher
+
+    # Sanity first (cheap; spec §7.3: it must pass before any C run), then the cache. A failed
+    # sanity check raises, leaving no teacher/sanity marker and building no cache.
+    ctx.run_stage("extract/D", lambda: extract.extract("D", ctx.profile))
+    ctx.run_stage("teacher/sanity", lambda: teacher.run_sanity(ctx.profile))
+    ctx.run_stage("teacher/cache", lambda: teacher.build_teacher_cache(ctx.profile))
 
 
 # ---------------------------------------------------------------- training
@@ -135,7 +141,7 @@ def _eval_args(p: argparse.ArgumentParser) -> None:
         help="while probe C/gamma are null in config, run SVMs with C=1 / C=10,gamma=scale "
         "(rows marked svm_params_frozen=False) instead of k-NN only",
     )
-    p.add_argument("--n-jobs", type=int, default=16)
+    p.add_argument("--n-jobs", type=int, default=None, help="joblib workers (default: $MO433_N_JOBS or 6)")
 
 
 def _probe_args(p: argparse.ArgumentParser) -> None:
@@ -210,7 +216,7 @@ def _extract(ctx: Context, args: argparse.Namespace) -> None:
 def _probe(ctx: Context, args: argparse.Namespace) -> None:
     from mo433 import probe
 
-    n_jobs = getattr(args, "n_jobs", 16)
+    n_jobs = getattr(args, "n_jobs", None) or probe.N_JOBS
     if args.select_svm:
         encoders = getattr(args, "encoder", None) or [probe.SELECTION_ENCODER]
         if len(encoders) != 1:
@@ -245,7 +251,7 @@ def _probe(ctx: Context, args: argparse.Namespace) -> None:
 
 @command("diagnose", help="collapse check and characterization (spec §7.3)", add_args=_diagnose_args)
 def _diagnose(ctx: Context, args: argparse.Namespace) -> None:
-    from mo433 import diagnostics
+    from mo433 import diagnostics, probe
 
     svm = _svm(ctx, args)
     for eid in _encoders(ctx, args):
@@ -257,7 +263,7 @@ def _diagnose(ctx: Context, args: argparse.Namespace) -> None:
                 svm=svm,
                 anchor=getattr(args, "anchor", None),
                 tsne=not getattr(args, "no_tsne", False),
-                n_jobs=getattr(args, "n_jobs", 16),
+                n_jobs=getattr(args, "n_jobs", None) or probe.N_JOBS,
             )
             check = rec.get("teacher_check") or rec.get("collapse_check")
             verdict = "n/a (row A)" if check is None else (
@@ -274,7 +280,10 @@ def _diagnose(ctx: Context, args: argparse.Namespace) -> None:
 
 @command("measure", help="params, FLOPs, latency, GPU-hours (spec §7.4)")
 def _measure(ctx: Context, args: argparse.Namespace) -> None:
-    raise NotImplementedError("measure")
+    from mo433 import measure
+
+    # Cheap (a few GPU minutes); re-run with --force on an idle GPU to replace provisional latency.
+    ctx.run_stage("measure", lambda: measure.measure(ctx.profile))
 
 
 def _report_args(p: argparse.ArgumentParser) -> None:
