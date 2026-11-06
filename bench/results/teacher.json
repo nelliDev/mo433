@@ -1,0 +1,56 @@
+[
+  {
+    "batch": 64,
+    "imgs_per_s": 1503,
+    "feat": [
+      64,
+      384
+    ],
+    "peak_alloc_MiB": 194,
+    "peak_reserved_MiB": 250
+  },
+  {
+    "batch": 128,
+    "imgs_per_s": 1528,
+    "feat": [
+      128,
+      384
+    ],
+    "peak_alloc_MiB": 334,
+    "peak_reserved_MiB": 506
+  },
+  {
+    "batch": 256,
+    "imgs_per_s": 1448,
+    "feat": [
+      256,
+      384
+    ],
+    "peak_alloc_MiB": 615,
+    "peak_reserved_MiB": 802
+  },
+  {
+    "batch": 512,
+    "imgs_per_s": 1423,
+    "feat": [
+      512,
+      384
+    ],
+    "peak_alloc_MiB": 1175,
+    "peak_reserved_MiB": 1738
+  },
+  {
+    "batch": 1024,
+    "imgs_per_s": 1393,
+    "feat": [
+      1024,
+      384
+    ],
+    "peak_alloc_MiB": 2298,
+    "peak_reserved_MiB": 3860
+  },
+  {
+    "batch": 2048,
+    "oom": true
+  }
+]

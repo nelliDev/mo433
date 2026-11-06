@@ -1,0 +1,14 @@
+[
+  {
+    "workers": 4,
+    "views_per_s": 3102
+  },
+  {
+    "workers": 8,
+    "views_per_s": 5370
+  },
+  {
+    "workers": 14,
+    "views_per_s": 6614
+  }
+]

@@ -1,0 +1,146 @@
+{
+ "torch": "2.11.0+cu128",
+ "gpu": "NVIDIA GeForce RTX 3060 Laptop GPU",
+ "results": [
+  {
+   "size": "S",
+   "w": 24,
+   "pairs": 128,
+   "images": 256,
+   "forward": "separate",
+   "pairs_per_s": 1679,
+   "img_per_s": 3358,
+   "epoch_100k_s": 59.6,
+   "peak_alloc_GB": 0.87,
+   "peak_reserved_GB": 1.02
+  },
+  {
+   "size": "S",
+   "w": 24,
+   "pairs": 128,
+   "images": 256,
+   "forward": "concat",
+   "pairs_per_s": 1752,
+   "img_per_s": 3505,
+   "epoch_100k_s": 57.1,
+   "peak_alloc_GB": 0.87,
+   "peak_reserved_GB": 1.05
+  },
+  {
+   "size": "S",
+   "w": 24,
+   "pairs": 256,
+   "images": 512,
+   "forward": "separate",
+   "pairs_per_s": 2283,
+   "img_per_s": 4566,
+   "epoch_100k_s": 43.8,
+   "peak_alloc_GB": 1.39,
+   "peak_reserved_GB": 1.53
+  },
+  {
+   "size": "S",
+   "w": 24,
+   "pairs": 256,
+   "images": 512,
+   "forward": "concat",
+   "pairs_per_s": 2290,
+   "img_per_s": 4580,
+   "epoch_100k_s": 43.7,
+   "peak_alloc_GB": 1.37,
+   "peak_reserved_GB": 1.55
+  },
+  {
+   "size": "S",
+   "w": 24,
+   "pairs": 512,
+   "images": 1024,
+   "forward": "separate",
+   "pairs_per_s": 2629,
+   "img_per_s": 5257,
+   "epoch_100k_s": 38.0,
+   "peak_alloc_GB": 2.38,
+   "peak_reserved_GB": 2.51
+  },
+  {
+   "size": "S",
+   "w": 24,
+   "pairs": 1024,
+   "images": 2048,
+   "forward": "separate",
+   "pairs_per_s": 2917,
+   "img_per_s": 5834,
+   "epoch_100k_s": 34.3,
+   "peak_alloc_GB": 4.5,
+   "peak_reserved_GB": 4.61
+  },
+  {
+   "size": "L",
+   "w": 48,
+   "pairs": 128,
+   "images": 256,
+   "forward": "separate",
+   "pairs_per_s": 942,
+   "img_per_s": 1885,
+   "epoch_100k_s": 106.1,
+   "peak_alloc_GB": 1.41,
+   "peak_reserved_GB": 1.5
+  },
+  {
+   "size": "L",
+   "w": 48,
+   "pairs": 128,
+   "images": 256,
+   "forward": "concat",
+   "pairs_per_s": 1009,
+   "img_per_s": 2017,
+   "epoch_100k_s": 99.2,
+   "peak_alloc_GB": 1.39,
+   "peak_reserved_GB": 1.49
+  },
+  {
+   "size": "L",
+   "w": 48,
+   "pairs": 256,
+   "images": 512,
+   "forward": "separate",
+   "pairs_per_s": 1089,
+   "img_per_s": 2179,
+   "epoch_100k_s": 91.8,
+   "peak_alloc_GB": 2.38,
+   "peak_reserved_GB": 2.49
+  },
+  {
+   "size": "L",
+   "w": 48,
+   "pairs": 256,
+   "images": 512,
+   "forward": "concat",
+   "pairs_per_s": 1122,
+   "img_per_s": 2244,
+   "epoch_100k_s": 89.1,
+   "peak_alloc_GB": 2.36,
+   "peak_reserved_GB": 2.55
+  },
+  {
+   "size": "L",
+   "w": 48,
+   "pairs": 512,
+   "images": 1024,
+   "forward": "separate",
+   "pairs_per_s": 1220,
+   "img_per_s": 2440,
+   "epoch_100k_s": 82.0,
+   "peak_alloc_GB": 4.32,
+   "peak_reserved_GB": 4.43
+  },
+  {
+   "size": "L",
+   "w": 48,
+   "pairs": 1024,
+   "images": 2048,
+   "forward": "separate",
+   "oom": true
+  }
+ ]
+}
