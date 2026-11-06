@@ -1,0 +1,4 @@
+encoder_id,kind,rows,params,flops,macs,feature_dim,input_px,gpu_batch,gpu_latency_ms,gpu_latency_ms_sd,gpu_throughput_img_s,cpu_threads,cpu_latency_ms,cpu_latency_ms_sd,gpu_name,gpu_other_processes,cpu_load1,provisional,provisional_reason,measured_at
+S,student,A/B/C-S,1573272,353341440,176670720,192,96,256,23.25,0.068,11010.7,16,2.363,0.444,NVIDIA GeForce RTX 3060 Laptop GPU,,0.41,False,,2026-11-05T16:55:13-0300
+L,student,A/B/C-L,6284592,1407393792,703696896,384,96,256,62.332,0.047,4107.0,16,4.962,3.183,NVIDIA GeForce RTX 3060 Laptop GPU,,1.7,False,,2026-11-05T16:55:13-0300
+D,teacher,D,21665664,8481669120,4240834560,384,224,256,450.064,2.408,568.8,16,28.883,9.136,NVIDIA GeForce RTX 3060 Laptop GPU,,1.44,False,,2026-11-05T16:55:13-0300
