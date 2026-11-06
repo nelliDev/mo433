@@ -56,7 +56,7 @@ def test_smoke_all_end_to_end(tmp_path, monkeypatch):
     from mo433 import config, paths, probe, stages, train
 
     root = tmp_path / "artifacts-smoke"
-    monkeypatch.setenv("MO433_ROOT", str(root))
+    monkeypatch.setenv("MO433_SMOKE_ROOT", str(root))
     monkeypatch.setenv("MO433_NUM_WORKERS", "2")
     assert main(["all", "--profile", "smoke"]) == 0
 

@@ -37,6 +37,7 @@ def test_namespaced_stage_names(mo433_root):
 
 def test_smoke_and_full_markers_are_separate(tmp_path, monkeypatch):
     monkeypatch.delenv("MO433_ROOT", raising=False)
+    monkeypatch.delenv("MO433_SMOKE_ROOT", raising=False)
     monkeypatch.setattr("mo433.paths.REPO_ROOT", tmp_path)
     run_stage("demo", lambda: None, profile="smoke")
     assert is_done("demo", profile="smoke")
