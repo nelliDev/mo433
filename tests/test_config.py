@@ -25,7 +25,10 @@ def test_row_size_config_has_spec_budget():
     assert cfg.optimizer.weight_decay == pytest.approx(expected["weight_decay"])
     assert cfg.optimizer.warmup_epochs == expected["warmup_epochs"]
     assert cfg.optimizer.betas == (0.9, 0.999)
-    assert cfg.probe.linear_c is None and cfg.probe.rbf_c is None and cfg.probe.rbf_gamma is None
+    # SVM settings are the committed CV selection once `probe --select-svm` ran, else null.
+    svm = REPO_ROOT / "tuning" / "svm_selection.json"
+    sel = json.loads(svm.read_text()) if svm.exists() else {"linear_c": None, "rbf_c": None, "rbf_gamma": None}
+    assert (cfg.probe.linear_c, cfg.probe.rbf_c, cfg.probe.rbf_gamma) == (sel["linear_c"], sel["rbf_c"], sel["rbf_gamma"])
 
 
 def test_smoke_profile_shrinks_images_views_and_epochs():

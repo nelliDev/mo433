@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 # Cap joblib workers before mo433.probe reads it: 16 workers per pytest run OOM-killed the laptop.
@@ -17,6 +18,19 @@ def mo433_root(tmp_path, monkeypatch) -> Path:
     monkeypatch.setenv("MO433_SMOKE_ROOT", str(root))
     monkeypatch.delenv("MO433_POOL", raising=False)
     return root
+
+
+@pytest.fixture
+def null_svm_configs(tmp_path, monkeypatch) -> Path:
+    """A copy of configs/ with probe C/gamma back at null, the state before `probe --select-svm`."""
+    import shutil
+
+    configs = tmp_path / "configs-null-svm"
+    shutil.copytree(paths.CONFIGS_DIR, configs)
+    base = configs / "base.yaml"
+    base.write_text(re.sub(r"(?m)^(\s+(?:linear_c|rbf_c|rbf_gamma):)\s*\S+", r"\1 null", base.read_text()))
+    monkeypatch.setattr(paths, "CONFIGS_DIR", configs)
+    return configs
 
 
 def _stl10_present() -> bool:
