@@ -53,6 +53,20 @@ def test_run_costs_read_run_dirs_and_charge_teacher_cache_to_c(mo433_root):
     assert (c["row"], c["size"], c["frac"], c["seed"], c["complete"]) == ("C", "L", 50, 1, True)
 
 
+def test_epoch_gpu_time_above_its_wall_time_is_clamped_and_counted(mo433_root):
+    # #27: one bad CUDA-event reading (B-L-050-s0, epoch 85) made summary gpu_seconds 3x the wall time.
+    _write_json(mo433_root / "runs/B-L-050-s0/summary.json", {"wall_seconds": 130, "gpu_seconds": 10_090})
+    (mo433_root / "runs/B-L-050-s0/metrics.jsonl").write_text(
+        '{"epoch": 1, "epoch_seconds": 60, "gpu_seconds": 45}\n'
+        '{"epoch": 2, "epoch_seconds": 60, "gpu_seconds": 10045}\n'
+    )
+
+    (r,) = measure.run_costs()
+
+    assert r["gpu_h"] == round((45 + 60) / 3600, 4)
+    assert r["gpu_epochs_clamped"] == 1 and r["complete"] is True and r["wall_h"] == round(130 / 3600, 4)
+
+
 def test_unfinished_run_sums_its_epoch_log_and_is_marked_incomplete(mo433_root):
     log = mo433_root / "runs/B-L-100-s0/metrics.jsonl"
     log.parent.mkdir(parents=True)

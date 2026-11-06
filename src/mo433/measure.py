@@ -37,7 +37,10 @@ Outputs, under ``results_dir(profile)`` (``$MO433_ROOT/results/``):
                                     the id has another form, e.g. a tuning/control run)
     complete              True if ``summary.json`` exists; otherwise the times are summed
                           from ``metrics.jsonl`` (epoch_seconds + knn_seconds, gpu_seconds)
-    wall_h, gpu_h         from ``summary.json`` ``wall_seconds`` / ``gpu_seconds``
+    wall_h                from ``summary.json`` ``wall_seconds``
+    gpu_h                 summed from ``metrics.jsonl``, each epoch's ``gpu_seconds`` capped at its
+                          ``epoch_seconds`` (else ``summary.json`` ``gpu_seconds``)
+    gpu_epochs_clamped    epochs whose GPU time exceeded their wall time (a bad CUDA-event reading)
     teacher_cache_gpu_h_charged   the full one-off teacher-cache GPU time, charged to every
                           C run (spec §3), 0 for B
     total_gpu_h           gpu_h + teacher_cache_gpu_h_charged
@@ -61,6 +64,7 @@ import os
 import statistics
 import subprocess
 import time
+import warnings
 from pathlib import Path
 
 import torch
@@ -90,7 +94,7 @@ COST_COLUMNS = (
 )  # fmt: skip
 RUN_COLUMNS = (
     "run_id", "row", "size", "frac", "seed", "complete",
-    "wall_h", "gpu_h", "teacher_cache_gpu_h_charged", "total_gpu_h",
+    "wall_h", "gpu_h", "gpu_epochs_clamped", "teacher_cache_gpu_h_charged", "total_gpu_h",
 )  # fmt: skip
 
 
@@ -241,23 +245,42 @@ def teacher_cache_gpu_seconds(profile: str = "full") -> float | None:
     return None
 
 
-def _run_seconds(rd: Path) -> tuple[float, float, bool] | None:
-    """(wall s, GPU s, complete) from ``summary.json``, else summed from ``metrics.jsonl``."""
-    summary = _read_json(rd / "summary.json")
-    if summary and "gpu_seconds" in summary:
-        return float(summary.get("wall_seconds") or 0.0), float(summary["gpu_seconds"]), True
+def _epoch_log(rd: Path) -> tuple[float, float, int] | None:
+    """(wall s, GPU s, clamped epochs) summed from ``metrics.jsonl``. An epoch's GPU time is capped at
+    its own wall time: a CUDA-event sum above it is a bad reading (#27, B-L-050-s0 epoch 85)."""
     log = rd / "metrics.jsonl"
     if not log.exists():
         return None
     wall = gpu = 0.0
+    clamped = 0
     for line in log.read_text().splitlines():
         try:
             rec = json.loads(line)
         except ValueError:
             continue
-        wall += float(rec.get("epoch_seconds", 0.0)) + float(rec.get("knn_seconds", 0.0))
-        gpu += float(rec.get("gpu_seconds", 0.0))
-    return wall, gpu, False
+        epoch_s = float(rec.get("epoch_seconds", 0.0))
+        gpu_s = float(rec.get("gpu_seconds", 0.0))
+        if gpu_s > epoch_s:
+            warnings.warn(f"{rd.name}: epoch {rec.get('epoch')} gpu_seconds {gpu_s} > epoch_seconds {epoch_s}; clamped")
+            gpu_s, clamped = epoch_s, clamped + 1
+        wall += epoch_s + float(rec.get("knn_seconds", 0.0))
+        gpu += gpu_s
+    return wall, gpu, clamped
+
+
+def _run_seconds(rd: Path) -> tuple[float, float, bool, int] | None:
+    """(wall s, GPU s, complete, clamped epochs). Wall from ``summary.json`` when the run finished;
+    GPU from the clamped epoch log when there is one, else from ``summary.json``."""
+    summary = _read_json(rd / "summary.json")
+    epochs = _epoch_log(rd)
+    if summary and "gpu_seconds" in summary:
+        wall = float(summary.get("wall_seconds") or 0.0)
+        if epochs is None:
+            return wall, float(summary["gpu_seconds"]), True, 0
+        return wall, epochs[1], True, epochs[2]
+    if epochs is None:
+        return None
+    return epochs[0], epochs[1], False, epochs[2]
 
 
 def run_costs(profile: str = "full") -> list[dict]:
@@ -271,7 +294,7 @@ def run_costs(profile: str = "full") -> list[dict]:
         secs = _run_seconds(rd)
         if secs is None:
             continue
-        wall, gpu, complete = secs
+        wall, gpu, complete, clamped = secs
         key = _run_key(rd.name)
         row = key.row if key else None
         charged = cache_s if row == "C" else 0.0
@@ -285,6 +308,7 @@ def run_costs(profile: str = "full") -> list[dict]:
                 "complete": complete,
                 "wall_h": round(wall / 3600, 4),
                 "gpu_h": round(gpu / 3600, 4),
+                "gpu_epochs_clamped": clamped,
                 "teacher_cache_gpu_h_charged": round(charged / 3600, 4),
                 "total_gpu_h": round((gpu + charged) / 3600, 4),
             }
