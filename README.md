@@ -53,7 +53,8 @@ The code loads it with `torchvision.datasets.STL10(<data root>, download=False)`
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `MO433_ROOT` | artifact root (pool, teacher cache, runs, features, results) | `artifacts/` (`artifacts-smoke/` with `--profile smoke`) |
+| `MO433_ROOT` | artifact root of the full profile (pool, teacher cache, runs, features, results) | `artifacts/` |
+| `MO433_SMOKE_ROOT` | artifact root of `--profile smoke`; smoke never uses `MO433_ROOT` | `artifacts-smoke/` |
 | `MO433_POOL` | view-pool directory; put it on a `chattr +C` directory (≈55 GB memmap) | `$MO433_ROOT/pool` |
 | `MO433_DATA` | directory that contains `stl10_binary/` | `data/` |
 | `MO433_NUM_WORKERS` | data-loader workers for `pool` and training runs (cap it on a shared machine) | 14 (`pool`), 8 (training) |
@@ -63,7 +64,7 @@ The code loads it with `torchvision.datasets.STL10(<data root>, download=False)`
 
 Every stage writes its outputs and then an atomic `.done` marker under
 `$MO433_ROOT/stages/`; finished stages are skipped, `--force` rebuilds. `--profile smoke`
-(2k images, K = 2, 2 epochs, writes to `artifacts-smoke/`) runs the same pipeline in
+(2k images, K = 2, 2 epochs, writes to `$MO433_SMOKE_ROOT`, default `artifacts-smoke/`) runs the same pipeline in
 minutes and is the pre-flight check before every long run.
 
 Everything in one command, from the frozen configs (git tag `configs-frozen`):
@@ -79,7 +80,7 @@ they are null it stops after `extract` and says so: run `mo433 probe --select-sv
 (5-fold CV on B-S-100-s0), commit `configs/base.yaml`, rerun `mo433 all` (finished
 stages are skipped). The smoke `all` probes and diagnoses with the provisional SVM settings
 (`--provisional-svm`) and only one encoder per row (`A-S-s0`, `B-S-100-s0`, `C-S-100-s0`,
-`D`); its report goes to `$MO433_ROOT/report-repo/`, never to the committed files.
+`D`); its report goes to `$MO433_SMOKE_ROOT/report-repo/`, never to the committed files.
 
 Or stage by stage:
 

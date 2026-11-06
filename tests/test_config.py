@@ -96,3 +96,15 @@ def test_reported_runs_follow_week3_order():
 
 def test_run_id_format():
     assert run_id("C", "L", 50, 1) == "C-L-050-s1"
+
+
+def test_parse_encoder_id_round_trips_run_id_and_reads_a_and_d():
+    from mo433.config import EncoderId, parse_encoder_id, reported_runs
+
+    for r in reported_runs():
+        assert parse_encoder_id(run_id(*r)) == EncoderId(*r)
+    assert parse_encoder_id("A-S-s0") == EncoderId("A", "S", None, 0)
+    assert parse_encoder_id("D") == EncoderId("D", None, None, None)
+    for bad in ("B-S-100-s0-fv-otf", "B-S-100-s0-otf", "X-S-s0", "B-S-100"):
+        with pytest.raises(ValueError):
+            parse_encoder_id(bad)

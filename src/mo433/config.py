@@ -13,6 +13,7 @@ Every key must name a dataclass field: unknown keys, missing keys and wrong type
 from __future__ import annotations
 
 import dataclasses
+import re
 import types
 import typing
 from dataclasses import dataclass
@@ -73,6 +74,47 @@ class Config:
 def run_id(row: str, size: str, frac: int, seed: int) -> str:
     """Spec §8 run id, e.g. ``run_id("C", "L", 50, 1) == "C-L-050-s1"``."""
     return f"{row}-{size}-{frac:03d}-s{seed}"
+
+
+_ENCODER_ID_PATTERNS = (
+    re.compile(r"(?P<row>[BC])-(?P<size>[SL])-(?P<frac>\d{3})-s(?P<seed>\d+)"),
+    re.compile(r"(?P<row>A)-(?P<size>[SL])-s(?P<seed>\d+)"),
+    re.compile(r"(?P<row>D)"),
+)
+
+
+@dataclass(frozen=True)
+class EncoderId:
+    """A parsed encoder id; fields an encoder does not have are None (A: frac; D: all but row)."""
+
+    row: str
+    size: str | None
+    frac: int | None
+    seed: int | None
+
+    @property
+    def group(self) -> str:
+        """Encoder group = the id without the seed (A-S, B-S-100, D)."""
+        if self.row == "D":
+            return "D"
+        if self.row == "A":
+            return f"A-{self.size}"
+        return f"{self.row}-{self.size}-{self.frac:03d}"
+
+
+def parse_encoder_id(encoder_id: str) -> EncoderId:
+    """``B-S-100-s0`` / ``A-S-s0`` / ``D`` -> EncoderId; anything else raises ValueError."""
+    for pat in _ENCODER_ID_PATTERNS:
+        m = pat.fullmatch(encoder_id)
+        if m:
+            g = m.groupdict()
+            return EncoderId(
+                g["row"],
+                g.get("size"),
+                int(g["frac"]) if g.get("frac") else None,
+                int(g["seed"]) if g.get("seed") is not None else None,
+            )
+    raise ValueError(f"not an encoder id: {encoder_id!r}")
 
 
 SEEDS = {"S": (0, 1, 2), "L": (0, 1)}
