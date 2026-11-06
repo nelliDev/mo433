@@ -1,7 +1,6 @@
 """`mo433 probe` / `mo433 diagnose` end to end on a synthetic features file."""
 
 import json
-import shutil
 
 import numpy as np
 import pytest
@@ -13,17 +12,14 @@ N_TRAIN, N_TEST, C, W = 5000, 500, 10, 4  # 8w = 32-d main features
 
 
 @pytest.fixture
-def repo(tmp_path, monkeypatch, mo433_root):
-    """Synthetic splits and a copy of configs/, so nothing committed is touched."""
+def repo(tmp_path, monkeypatch, mo433_root, null_svm_configs):
+    """Synthetic splits and a copy of configs/ with null SVM settings, so nothing committed is touched."""
     splits_dir = tmp_path / "splits"
     splits_dir.mkdir()
     y = np.repeat(np.arange(C), N_TRAIN // C)
     for name, arr in splits.generate(y, n_unlabeled=100).items():
         np.save(splits_dir / f"{name}.npy", arr)
-    configs = tmp_path / "configs"
-    shutil.copytree(paths.CONFIGS_DIR, configs)
     monkeypatch.setattr(paths, "SPLITS_DIR", splits_dir)
-    monkeypatch.setattr(paths, "CONFIGS_DIR", configs)
     return tmp_path
 
 

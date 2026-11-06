@@ -38,10 +38,10 @@ def test_smoke_all_runs_every_stage_and_probes_with_provisional_svms(recorded):
     assert args["train-all"].only is None and args["train-all"].dry_list is False
 
 
-def test_full_all_stops_before_probing_while_svm_params_are_null(recorded, capsys):
+def test_full_all_stops_before_probing_while_svm_params_are_null(recorded, null_svm_configs, capsys):
     from mo433 import config
 
-    assert config.load_config().probe.linear_c is None  # the committed state until --select-svm
+    assert config.load_config().probe.linear_c is None  # the state until --select-svm
     with pytest.raises(SystemExit, match="--select-svm"):
         main(["all"])
     assert [c[0] for c in recorded] == ["splits", "invariants", "pool", "teacher", "train-all", "extract"]
