@@ -17,3 +17,6 @@ report/*.fls
 report/*.fdb_latexmk
 report/*.out
 report/main.pdf
+report/*.bbl
+report/*.blg
+report/*.toc

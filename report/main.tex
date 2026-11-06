@@ -1,54 +1,631 @@
-% Minimal skeleton that \input's every generated file, so `latexmk -pdf main.tex` (run in
-% report/) checks that the generated tables, macros and figures compile. Replace it with the
-% course template once announced; keep the \input lines.
+% MO433 report. Numbers come from generated/macros.tex and generated/*.tex (written by
+% `mo433 report` from results.csv and report/data/; never edit them) or are traceable to a
+% committed file named in a comment next to them. The course template has not been announced:
+% keep the sections self-contained so they can be moved into it. Build: latexmk -pdf main.tex
 \documentclass[10pt]{article}
 \usepackage[margin=2cm]{geometry}
 \usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
 \usepackage{booktabs}
 \usepackage{graphicx}
 \usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[hidelinks]{hyperref}
 
 \input{generated/macros}
 
-\title{Distilling Unsupervised Representations into Small Models}
-\author{MO433}
+% Unresolved points: grep for \todo before submission.
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\CB}{C$-$B}
+
+\title{Distilling Unsupervised Representations into Small Models:\\
+  Distillation from a Frozen DINO ViT vs.\ Direct VICReg Training on STL-10}
+\author{Jo\~ao Deltregia Martinelli\\ MO433 \todo{affiliation/format per course template}}
 \date{}
 
 \begin{document}
 \maketitle
 
+% =====================================================================================
+\begin{abstract}
+We test whether distilling a frozen self-supervised DINO ViT-S/16 into a small residual
+convnet (row C) beats training the same convnet from scratch with VICReg (row B) on STL-10,
+for two student sizes (1.57M and 6.28M parameters) and two amounts of unlabeled data (100\%
+and 50\%), under an identical student training budget and with frozen-feature probes shared
+by all encoders. Distillation wins in every one of the 48 settings (2 sizes $\times$ 2 data
+amounts $\times$ 3 probes $\times$ 4 label fractions), by \GapLFullRbfHundred{} to
+\GapLHalfLinOne~pp, always beyond the seed-to-seed spread; at 10\% labels the small
+distilled student reaches \AccCSFullLinTen\% linear-SVM accuracy against \AccBSFullLinTen\%
+for VICReg. Halving the unlabeled data (and with it the optimizer steps) widens the gap for
+both sizes, and the gap shrinks only slightly from the small to the large student, so no
+crossover appears in the range we can afford. The verdict reverses once the teacher's
+pretraining cost (an estimated \GpuHTeacherPretrain~GPU-h) is charged: per GPU-hour, direct
+training is about three orders of magnitude more efficient. All runs are short (100 epochs
+on a laptop GPU) and should be read as undertrained.
+\end{abstract}
+
+% =====================================================================================
+\section{Introduction}
+\label{sec:intro}
+
+Self-supervised pretraining produces strong but large encoders, while many applications need
+a small convnet. Two routes lead there: train the small network directly with a
+self-supervised objective, or distil a large, already-pretrained self-supervised teacher
+into it. The second route needs no labels either, but it relies on a teacher whose
+pretraining cost exceeds the student's budget by orders of magnitude. Which route is better
+is not a fixed answer: the course brief hypothesizes that distillation wins for small
+students and small data or compute budgets, and that direct training catches up as the
+student, the data and the epochs grow.
+
+We measure the distillation-minus-direct gap (\CB) in a controlled setting: one frozen
+teacher (DINO ViT-S/16~\citep{caron2021dino}), one direct method
+(VICReg~\citep{bardes2022vicreg}), one student family designed for 96-pixel inputs at two
+widths, and two amounts of unlabeled STL-10 data~\citep{coates2011stl10}. B and C share
+architecture, initialization, views, optimizer, epochs, steps and batch size; the teacher's
+costs are recorded separately so that the comparison can also be made per GPU-hour. A
+difference counts only if it exceeds the seed-to-seed spread. Two reference rows complete
+the design: the student at random initialization (A), which separates ``distillation
+helped'' from ``any training helped'', and the teacher itself (D), which shows how much of
+the teacher survives compression.
+
+% =====================================================================================
+\section{Related work}
+\label{sec:related}
+
+\paragraph{Self-supervised representation learning.}
+Joint-embedding methods make the representations of two views of an image agree.
+SimCLR~\citep{chen2020simclr} uses in-batch negatives and needs large batches and long
+schedules; BYOL~\citep{grill2020byol} drops negatives and predicts a moving-average target
+network; DINO~\citep{caron2021dino} turns this into self-distillation without labels and
+yields ViT features that are strong $k$-NN classifiers; VICReg~\citep{bardes2022vicreg}
+prevents collapse explicitly with variance, invariance and covariance terms, without
+negatives or a momentum encoder. I-JEPA~\citep{assran2023ijepa} predicts the representations
+of masked target blocks, and MAE~\citep{he2022mae} reconstructs masked pixels and is
+strongest under fine-tuning rather than frozen probes. These works study large encoders and
+do not ask how a \emph{small} convnet trained this way compares with one distilled from a
+large teacher at equal compute. We use DINO as the teacher and VICReg, the brief's suggested
+default for a modest GPU, as the direct method.
+
+\paragraph{Knowledge distillation and self-supervised distillation.}
+Classical distillation~\citep{hinton2015distilling} trains a student on a teacher's softened
+class probabilities; it is supervised, and the teacher's training cost is taken as given.
+SEED~\citep{fang2021seed}, CompRess~\citep{koohpayegani2020compress} and
+DisCo~\citep{gao2022disco} show that a self-supervised teacher can rescue small students for
+which contrastive learning performs poorly: SEED, for example, lifts an EfficientNet-B0
+from 42.2\% to 67.6\% ImageNet linear accuracy over a MoCo-v2 baseline. All three distil
+convnet teachers into convnet students on ImageNet, compare against a direct-SSL baseline
+trained for the same student epochs, and do not charge the teacher's pretraining or forward
+cost to the student. DisCo's finding that the student's embedding dimension can bottleneck
+distillation motivates the 2048-wide projector we keep in row C.
+
+\paragraph{Cross-architecture distillation.}
+Distilling a Transformer into a CNN needs care in how features are aligned:
+\citet{liu2022crossarch} project student features into the teacher's space with
+cross-attention and group-wise linear projectors, and OFA-KD~\citep{hao2023ofakd} shows with
+CKA that heterogeneous architectures diverge in their intermediate features and aligns them
+in logit space. Both are supervised. We therefore distil only the teacher's final pooled
+embedding, through a learned projector, without labels.
+
+\paragraph{Closest work.}
+\citet{shi2022smallssl} argue that distillation is costly in resource-limited settings
+because of the teacher, and show that small self-supervised models trained directly close
+much of the gap once their training is tuned; this is why row B receives the full tuning
+effort here (Section~\ref{sec:tuning}). The closest prior work to our question is
+\citet{farhat2024distillalt}, who find that small models distilled from a pretrained teacher
+(including Transformer--convnet pairs) match or beat pretrain-then-finetune at a fraction
+of the cost, and note that the effect tends not to occur when the task is data-limited.
+Their distillation is task-specific rather than unlabeled representation distillation,
+and their speed-up does not charge the teacher's pretraining.
+
+\paragraph{What is left open.}
+No prior work measures \emph{where} distillation from a frozen self-supervised ViT stops
+beating direct self-supervised training of a small convnet as student size and unlabeled
+data vary, under a budget that includes the teacher. We locate that crossover (or show
+that it lies outside the tested range) with matched student budgets, seed-level spreads,
+and an accounting that includes the teacher's published pretraining cost.
+
+% =====================================================================================
+\section{Method}
+\label{sec:method}
+
+\subsection{Data, splits and seeds}
+\label{sec:data}
+
+We use STL-10~\citep{coates2011stl10}: 100k unlabeled, 5k labeled training and 8k test
+images at $96\times96$ pixels, 10 classes. All 100k unlabeled images are used for
+self-supervised training and distillation (the brief suggests a 10k--30k subset on a modest
+GPU; our throughput measurements, Section~\ref{sec:compute}, allowed the full split).
+They are stored in a seeded random order, and the \emph{ablation subset} is the first 50k
+images of that order, shared by B, C, both sizes and all seeds.
+
+The labeled training set has three uses, each with fixed, committed indices
+(\texttt{splits/}). (i)~A class-stratified 10\% \emph{validation split} (500 images) scores
+every tuning and selection choice, with the remaining 90\% as the $k$-NN neighbour bank.
+(ii)~Five stratified folds of the full labeled set select the SVM hyperparameters.
+(iii)~The reported probes are fitted on label fractions of 1\%, 10\%, 50\% and 100\% of the
+full labeled set, three stratified draws each, generated exactly as in the brief
+(\texttt{random\_state} = draw). The test split is used only for the reported numbers and
+informs no choice. Every encoder is probed on the same subsets.
+
+Seed $s$ initializes the student and seeds the sampler; row A with seed $s$ is exactly the
+initial network of B and C with seed $s$. The small student (S) uses seeds 0--2 and the
+large one (L) seeds 0--1. Runs seed Python, NumPy, PyTorch and the sampler but are not
+bitwise deterministic (cuDNN kernels, bf16 autocast).
+
+\subsection{View pool and teacher cache}
+\label{sec:pool}
+
+B and C share a \emph{view pool} of $K=20$ augmented views per unlabeled image, generated
+once with lightly's \texttt{VICRegViewTransform} (96 px input, minimum crop scale 0.2,
+Gaussian blur probability 0.5 with $\sigma\in[0.1,1]$, other settings at their defaults)
+and stored as a uint8 memory map ($\approx$55~GB). A chunk-shuffled sampler permutes
+64-image chunks each epoch and draws view indices at random: two distinct views per image
+for B, one for C. Because the views are fixed, the teacher's feature for every (image, view)
+pair is computed once (2M $\times$ 384, fp16) and reused by every C run, seed, size and data
+fraction; its \GpuHTeacherCache~GPU-h are charged to C (Table~\ref{tab:budget}).
+
+\subsection{Encoders}
+\label{sec:encoders}
+
+\paragraph{Teacher (D).} \texttt{vit\_small\_patch16\_224.dino} from timm, identical to the
+official DINO ViT-S/16 800-epoch checkpoint, frozen in \texttt{eval()} mode
+(\ParamsD{}M parameters, \FeatDimD-d). Each 96-pixel image or view is resized bicubically to
+224 pixels without cropping and normalized with ImageNet statistics; the feature is the CLS
+token after the final LayerNorm (timm's pooled output), computed under fp16 autocast. The
+teacher passed the sanity check before any C run (validation $k$-NN \ValKnnD\%, embedding
+spread \SpreadD, $k$-means NMI \NmiValD; Table~\ref{tab:diagnostics}). The published
+reference of 74.5\% $k$-NN is an ImageNet number, so this check is qualitative: it rules
+out a broken checkpoint or pipeline, not a mismatch with the paper.
+
+\paragraph{Student family ``ResNet96'' (A, B, C).} A basic-residual network adapted to
+96-pixel inputs: a $3\times3$ stride-2 stem without max-pool, four stages of two basic
+blocks with widths $w$/$2w$/$4w$/$8w$ and feature maps $48\to24\to12\to6$, global average
+pooling, and no head. BatchNorm and ReLU throughout, Kaiming initialization, and only the
+seed differs between A, B and C. Sizes differ by width only: S ($w=24$, \ParamsS{}M
+parameters, \FeatDimS-d) and L ($w=48$, \ParamsL{}M, \FeatDimL-d); the teacher is
+$\approx$3.5$\times$ larger than L. We rejected depthwise/ConvNeXt-style blocks, which are
+weak under stock self-supervised recipes and were 3.1$\times$ slower in our benchmark, and a
+trained multi-scale fusion head, which could adapt differently under B and C and add a
+second architectural difference to the gap; multi-scale features are instead tested with an
+evaluation-only probe (Section~\ref{sec:multiscale}). Features are always extracted in
+\texttt{eval()} mode; for row A this means BatchNorm uses its default running statistics,
+so A's features do not depend on batch composition.
+
+\subsection{Training rows B and C}
+\label{sec:training}
+
+Both rows train for $E=100$ epochs with batch 256 (pairs for B, images for C), AdamW
+($\beta=(0.9,0.999)$, weight decay on all parameters), linear warmup followed by a per-step
+cosine decay to zero, bf16 autocast and channels-last memory layout. The learning rate,
+weight decay and warmup come from the Optuna study on B (Section~\ref{sec:tuning}) and are
+copied unchanged to C and to L. Only final-epoch weights are probed; per-epoch validation
+$k$-NN is logged for monitoring and never used for selection. B and C at the same size and
+data fraction therefore take the same number of optimizer steps.
+
+\textbf{Row B} uses lightly's \texttt{VICRegLoss} with default coefficients
+($\lambda=\mu=25$, $\nu=1$) on a three-layer expander of width 2048, discarded after
+training. \textbf{Row C} maps the student feature through a projector
+$\mathrm{Linear}(d,2048)$--BN--GELU--$\mathrm{Linear}(2048,384)$, discarded after training,
+and minimizes $1-\cos(\text{projector}(\text{student}(v)),\,\text{teacher}(v))$ averaged over
+the batch, where student and teacher see the same view $v$ (96 px and 224 px respectively).
+No labels, logits or classification heads are used in either row.
+
+\subsection{Tuning protocol}
+\label{sec:tuning}
+
+All tuning was done on S and scored by $k$-NN ($k=20$, cosine) on the validation split,
+using the encoder's pooled feature, never a head. Per \citet{shi2022smallssl}, a weakly
+tuned B would inflate C's win, so B received the optimizer search and C inherits it.
+
+\paragraph{Optimizer.} One Optuna study on B (S, 100\% data, 20 epochs, one seed per trial,
+TPE sampler, median pruner, 16 trials) over learning rate $\in[3\cdot10^{-4},3\cdot10^{-3}]$
+(log), weight decay $\in[0.01,0.2]$ (log) and warmup $\in\{1,2,4\}$ epochs, with the
+default configuration ($10^{-3}$, 0.05, 2) queued as trial 0. The winner was learning rate
+$2.86\cdot10^{-3}$, weight decay 0.110 and 2 warmup epochs, at 72.6\% validation $k$-NN
+against 66.0\% for the default (\texttt{tuning/optuna\_b.json}). Its learning rate lies close
+to the upper bound of the search space (Section~\ref{sec:limitations}).
+A LARS check (6 configurations, one seed each) did not change the decision.%
+\footnote{LARS on B (S, 20 epochs): base learning rate $\in\{0.2,1,2\}\times$ weight decay
+$\in\{10^{-6},10^{-4}\}$, scaled by batch/256. Best 70.8\% validation $k$-NN (base learning
+rate 2.0, weight decay $10^{-6}$, at the edge of the grid) against 72.6\% for the AdamW
+winner; tuned over 6 configurations, one seed each (\texttt{tuning/lars.json}).}
+
+\paragraph{Equal-effort head grid.} With the winning optimizer, B's expander width and C's
+projector hidden width were each searched over $\{1024, 2048, 4096\}$ with 2 seeds per point
+(6 trials per row, 20 epochs). A width would replace 2048 only if its two-seed mean beat
+2048's by more than the larger of the two seed ranges. Both rows kept 2048: for B, 2048
+scored 72.4\% against 70.6\% (1024) and 70.4\% (4096); for C, 4096 led 2048 by 0.1~pp
+(89.8\% vs 89.7\%), well inside the 0.6~pp threshold (\texttt{tuning/grid\_\{B,C\}.json}).
+No completed tuning trial was collapse-flagged (the 9 pruned Optuna trials stopped before the
+check).
+
+\paragraph{Fixed-view control.} One matched pair of B runs (S, 100\% data, 100 epochs, seed
+0, tuned settings), one on the pool and one on fresh augmentations at every step, tested
+whether the finite pool handicaps B. A pre-registered rule, fixed before the pair ran,
+would have moved every B run to on-the-fly augmentation if on-the-fly beat the pool by more
+than 2~pp validation $k$-NN. It did not fire: $\Delta_{\text{val}}=-0.2$~pp
+(\texttt{tuning/fixed\_view.json}); see Section~\ref{sec:limitations}.
+
+\subsection{Evaluation}
+\label{sec:eval}
+
+A single extraction function, behind an encoder registry that never branches on the row,
+computes frozen features in \texttt{eval()} mode under \texttt{no\_grad} with a
+deterministic transform: the native 96-pixel image for students (no resize or crop is
+needed at native resolution) and the teacher input of Section~\ref{sec:encoders}. Features
+are L2-normalized and then standardized with a scaler fitted on the training subset only.
+Three probes are fitted on every label subset and scored on the test split: $k$-NN (cosine,
+$k=\min(20, n_{\text{per class}})$, untuned), a linear SVM (\texttt{LinearSVC}) and an RBF
+SVM (\texttt{SVC}), without subsampling (5k training images).
+
+The SVM hyperparameters were selected once, by 5-fold cross-validation on the full labeled
+set, on the first reported B encoder (B-S-100-s0, 100 epochs), and then frozen for every
+encoder, label fraction, draw and the multi-scale probe: linear $C=0.01$ (CV 81.2\%) from
+$\{10^{-3},\dots,10^{2}\}$, and RBF $C=100$, $\gamma=\texttt{scale}$ (CV 82.2\%) from
+$C\in\{0.1,1,10,100\}\times\gamma\in\{0.1,1,10,\texttt{scale}\}$
+(\texttt{tuning/svm\_selection.json}). $C=100$ is the edge of the grid, but $C=10$ scored
+82.18\%, effectively tied, so the edge is not limiting.
+
+\paragraph{Diagnostics.} An encoder is collapse-flagged if, on the validation split, its
+$k$-NN accuracy or $k$-means ($k=10$) NMI is at most that of row A at the same size and
+seed, or its \emph{spread} (per-dimension standard deviation of L2-normalized embeddings
+times $\sqrt d$) is below 0.3. The check ran after every tuning trial and every reported
+run; no reported run was flagged (Table~\ref{tab:diagnostics}). On the test split we report
+$k$-means NMI and ARI and a t-SNE projection (perplexity 30, \texttt{random\_state=0}, same
+parameters for all encoders).
+
+\paragraph{Aggregation.} For each encoder and probe we average the three label draws within
+a seed, then report mean $\pm$ standard deviation over seeds (3 for S, 2 for L; the L runs
+are also listed individually in Table~\ref{tab:l-runs}). D is one checkpoint, so its
+$\pm$ is the standard deviation over draws. A \CB{} gap is \emph{beyond spread} only if its
+magnitude exceeds the larger of B's and C's seed standard deviations.
+
+\subsection{Hardware, costs and throughput}
+\label{sec:compute}
+
+Every run, including all tuning, used one laptop: NVIDIA RTX 3060 Laptop GPU (6~GB), 16 CPU
+threads, 15~GB RAM. Parameters and FLOPs are counted at each encoder's native input (96 px
+students, 224 px teacher); GPU latency is measured at batch 256 in fp32 (10 warm-up and 100
+timed batches) and CPU latency at batch 1 with 16 threads (Table~\ref{tab:costs}). GPU
+time is recorded per run, and the teacher cache's GPU time is charged to C.
+
+The choice of $N$ (all 100k images), $K=20$ and $E=100$ followed throughput measurements
+made before implementation, as the brief asks. (i)~Loader: on-the-fly
+\texttt{VICRegViewTransform} produced 3.1k/5.4k/6.6k views/s with 4/8/14 workers, competing
+with training for CPU; a pre-generated pool larger than RAM is disk-bound at
+$\approx$500 pairs/s under per-image random reads, but the chunk-shuffled sampler sustains
+6--11k pairs/s. (ii)~Student steps: a B step at 256 pairs ran at 4.6k (S) and 2.2k (L)
+images/s, a C step at 5.7k (S) and 2.5k (L) images/s, so the student's GPU step is the
+bottleneck. (iii)~Teacher: the fp16 forward pass at 224 pixels ran at $\approx$1.45k
+images/s, which would bottleneck an online-teacher C run and motivated the cache. With these rates, 20 runs of 100 epochs fit in
+an 18.7~GPU-h plan; the planning rule (the whole set within 30 wall-hours, so that it could
+be rerun once) allowed up to 123 epochs, and we used 100.
+\todo{the throughput figures in this paragraph come from issues \#6 and \#12 (bench results on
+unmerged branches task/env-throughput and task/student-throughput); commit those RESULTS
+files or cite the issues explicitly} A 5-epoch dry run on the real pool confirmed the plan:
+GPU time per epoch was 45.2~s (B-S) and 17.8~s (C-S), the loader stalled training for
+about 1\% of the time, and the wall/GPU overhead was 1.10$\times$, below the 1.3$\times$
+threshold of the pre-registered slip rule, so no images or epochs were cut
+(\texttt{tuning/dryrun.json}). The 20 reported runs took \WallHTotal~wall-hours in total.
+
+% =====================================================================================
 \section{Results}
-At 10\% labels, the small distilled student reaches \AccCSFullLinTen\% (linear SVM) against
-\AccBSFullLinTen\% for VICReg, a C$-$B gap of \GapSFullLinTen~pp (reference sd \GapSdSFullLinTen;
-beyond spread: \GapBeyondSFullLinTen). The teacher reaches \AccDLinHundred\% with all labels.
+\label{sec:results}
+
+All 20 reported runs completed and none was collapse-flagged. Every number below is a test
+accuracy unless stated otherwise.
 
 \input{generated/main_probes}
-\input{generated/l_runs}
-\input{generated/ablation}
-\input{generated/multiscale}
-\input{generated/costs}
-\input{generated/budget}
-\input{generated/diagnostics}
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=0.48\linewidth]{figures/label_efficiency}\hfill
   \includegraphics[width=0.48\linewidth]{figures/gap_vs_params}
-  \caption{Left: label efficiency (linear SVM; error bars: seed sd, D: draw sd).
-    Right: C$-$B gap vs student parameters (error bars: larger of B's and C's seed sd).}
+  \caption{Left: label efficiency (linear SVM; error bars: seed sd; D: draw sd).
+    Right: \CB{} gap (linear SVM) vs.\ student parameters, per label fraction and
+    unlabeled-data setting (error bars: larger of B's and C's seed sd).}
+  \label{fig:curves}
 \end{figure}
+
+\subsection{Q1: Does distillation beat direct training?}
+\label{sec:q1}
+
+Yes, at every label fraction, with every probe, for both sizes
+(Table~\ref{tab:main-probes}, Figure~\ref{fig:curves} left). With 100\% unlabeled data the
+small students differ by \GapSFullLinOne~pp at 1\% labels (C \AccCSFullLinOne\% vs.\ B
+\AccBSFullLinOne\%, linear SVM) and by \GapSFullLinHundred~pp at 100\% labels (\AccCSFullLinHundred\%
+vs.\ \AccBSFullLinHundred\%); the large students differ by \GapLFullLinOne{} and
+\GapLFullLinHundred~pp. The reference spreads are at most \GapSdSFullKnnOne~pp, so every gap
+is beyond spread by more than an order of magnitude; this also holds for the two L seeds
+individually (Table~\ref{tab:l-runs}). The answer never changes with the label fraction:
+for the SVM probes the gap is largest at low label fractions and narrows with more labels,
+but even at 100\% labels it stays above 10~pp. The brief anticipated that all rows would land within
+a few points of each other at 100\% labels; here they do not. Both trained rows are far
+above row A (\AccASLinHundred\% for S at 100\% labels), so B is a genuine, non-collapsed
+baseline and C's advantage is not merely ``any training helps''.
+
+\subsection{Q2: How much of the teacher survives compression?}
+\label{sec:q2}
+
+\input{generated/costs}
+
+With all labels, the large distilled student reaches \AccCLFullLinHundred\% linear-SVM
+accuracy against the teacher's \AccDLinHundred\%, and the small one \AccCSFullLinHundred\%.
+The loss is concentrated at low label fractions: at 1\% labels C-L reaches
+\AccCLFullLinOne\% and C-S \AccCSFullLinOne\% against \AccDLinOne\% for D, i.e.\ the
+students' features need more labels to be separated as well as the teacher's. The teacher
+has 13.8$\times$ the parameters of S and 3.5$\times$ those of L, 24$\times$ and 6$\times$ the
+MACs, and is 19$\times$ and 7$\times$ slower on the GPU (12$\times$ and 6$\times$ on the CPU;
+Table~\ref{tab:costs}). Part of this cost gap comes from input resolution: the teacher runs
+at 224 pixels, the students at their native 96. The feature dimensions differ (192 for S,
+384 for L and D), and probe capacity grows with dimension, so S-vs-L comparisons carry
+this caveat.
+
+\subsection{Q3: Was the detour worth it?}
+\label{sec:q3}
+
+\input{generated/budget}
+
+Under matched student budgets, a C run is also cheaper than a B run: one view per sample
+instead of two makes a C epoch cost roughly 40\% of a B epoch (Table~\ref{tab:budget}). The
+brief's criterion, however, charges C the teacher's published pretraining cost. DINO
+reports 1.16k GPU-h for 300 epochs of ViT-S/16 (Table~8 of~\citep{caron2021dino}); linear
+extrapolation to the released 800-epoch checkpoint gives \GpuHTeacherPretrain~GPU-h, an
+estimate rather than a published number. Charged this way, every C run carries the full pretraining estimate and yields $\approx$0.03 accuracy points per GPU-hour, against
+\AccPerGpuHBLHalf--\AccPerGpuHBSHalf{} for B: by this criterion the detour is not worth it,
+by roughly three orders of magnitude, at both sizes and both data amounts. The same
+conclusion holds if accuracy is measured as the gain over row A rather than as raw
+accuracy, since the teacher's cost dominates C's denominator.
+
+The answer changes if the teacher is treated as a sunk cost, as it is for anyone who
+downloads a public checkpoint. Charging C only its distillation run plus the whole teacher
+cache, C delivers more accuracy per GPU-hour than B with 100\% data
+(\AccPerGpuHCSFullNoPretrain{} vs.\ \AccPerGpuHBSFull{} for S, \AccPerGpuHCLFullNoPretrain{}
+vs.\ \AccPerGpuHBLFull{} for L) and for L with 50\% data (\AccPerGpuHCLHalfNoPretrain{}
+vs.\ \AccPerGpuHBLHalf), but not for S with 50\% data (\AccPerGpuHCSHalfNoPretrain{} vs.\
+\AccPerGpuHBSHalf), where the fixed cache cost outweighs the short distillation run. This
+accounting is conservative for C: the cache was computed once and shared by all ten C runs,
+yet each run is charged all of it.
+Two measurement caveats apply. First, the GPU time recorded for B-L-050-s0
+(4.35~GPU-h) exceeds its wall time (1.37~h) and is three times that of its twin seed
+(1.35~GPU-h; \texttt{report/data/runs\_cost.csv}), which is impossible for a single-GPU run
+and points to a timing-record error. It inflates the B-L 50\% group mean, the B total and
+B-L 50\%'s accuracy per GPU-hour (about 60 with the wall-consistent value, still below C's
+\AccPerGpuHCLHalfNoPretrain); accuracy is unaffected.
+\todo{fix the GPU-time record of B-L-050-s0 in the run summary or in \texttt{mo433 report}
+and regenerate Table~\ref{tab:budget}; then drop this caveat} Second, the teacher-cache
+time was measured while the GPU was shared with other jobs, so it likely overstates the
+cache's cost; it is negligible next to the pretraining estimate either way.
+
+\subsection{Q4: Do the unsupervised diagnostics agree with the probes?}
+\label{sec:q4}
+
+\input{generated/diagnostics}
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{figures/tsne}
-  \caption{t-SNE of test-split features (perplexity 30, \texttt{random\_state=0}).}
+  \caption{t-SNE of test-split features for one encoder per row (seed 0, S, 100\% data;
+    perplexity 30, \texttt{random\_state=0}), coloured by true class.}
+  \label{fig:tsne}
 \end{figure}
+
+Mostly yes (Table~\ref{tab:diagnostics}). Validation $k$-NN, validation and test $k$-means
+NMI, and test ARI all order the encoders A $<$ B $<$ C $<$ D at both sizes and both data
+amounts, matching the probes; e.g.\ test NMI is \NmiTestBSFull{} for B-S and \NmiTestCSFull{}
+for C-S at 100\% data, against \NmiTestD{} for D. The t-SNE panel
+(Figure~\ref{fig:tsne}) shows the same progression: no class structure for A, partly
+separated clusters for B, and compact, mostly separated clusters for C and D.
+
+The spread statistic disagrees, and for a known reason. B's spread (\SpreadBSHalf{}--\SpreadBLFull)
+is higher than C's (\SpreadCSFull{}--\SpreadCLHalf) although C is better on every probe.
+VICReg's variance term directly pushes the per-dimension standard deviation up, whereas
+C's objective is only to match the teacher's direction after a projector; spread measures
+how evenly the dimensions are used, not whether classes are separated. It is useful as a
+collapse alarm (all trained encoders clear the 0.3 threshold, row A does not), not as a
+quality score.
+
+The brief asks what changes when two encoders score the same on the SVM but differ in NMI.
+The clearest instance here is across seeds of C: the linear-SVM standard deviation of C-L
+with 100\% data is \AccSdCLFullLinHundred~pp, while its test ARI varies by $\pm$\,0.09 and
+its test NMI by $\pm$\,0.04 (the same holds, less strongly, for C-S). The $k$-means seed is
+fixed, so this variation comes from the encoders: all seeds make the classes linearly
+separable to the same degree, but they differ in whether classes form compact, isolated
+clusters, which is what $k$-means needs. Linear separability and cluster geometry are thus
+different properties, and the probes alone would hide the second. (Between B encoders of
+equal SVM accuracy, B-S with 100\% data and B-L with 50\% data at \AccBSFullLinHundred\% and
+\AccBLHalfLinHundred\%, NMI and ARI agree closely.)
+
+\subsection{Q5: Does the gap change with student size?}
+\label{sec:q5}
+
+Only slightly, and B never overtakes C (Figure~\ref{fig:curves} right). With 100\% data, the
+gap shrinks from S to L at every label fraction and probe, e.g.\ for the linear SVM from
+\GapSFullLinOne{} to \GapLFullLinOne~pp at 1\% labels (the largest reduction) and from
+\GapSFullLinHundred{} to \GapLFullLinHundred~pp at 100\% labels. These reductions of
+0.3--1.6~pp are small next to gaps of 10--17~pp, rest on two sizes and on two seeds for L,
+and range from less than one to about four reference standard deviations, so they indicate
+a direction, not a rate. With
+50\% data the direction reverses at low label fractions: the linear-SVM gap at 1\% labels
+grows from \GapSHalfLinOne{} to \GapLHalfLinOne~pp. Extrapolating a crossover from two
+points would not be justified; within the tested range (1.57M--6.28M parameters, up to 100k
+images, 100 epochs) there is none.
+
+\subsection{Ablation: unlabeled data and steps}
+\label{sec:ablation}
+
+\input{generated/ablation}
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=\linewidth]{figures/ablation_grid}
-  \caption{Ablation grid: C$-$B gap per unlabeled-data setting $\times$ student size
+  \includegraphics[width=0.6\linewidth]{figures/ablation_grid}
+  \caption{Ablation grid: \CB{} gap per unlabeled-data setting $\times$ student size
     ($^*$ beyond spread).}
+  \label{fig:ablation}
 \end{figure}
+
+\paragraph{What it tests.} The ablation trains B and C on the 50k-image ablation subset
+instead of all 100k images, for both sizes, with the same seeds, epochs and probes. Epochs
+stay equal, so the 50\% runs also take half the optimizer steps: the ablation varies a joint
+data-and-compute budget, not data alone.
+
+\paragraph{Expectation.} Following the brief's hypothesis, a smaller budget should favour C,
+since the teacher supplies a dense target for every image while B must learn its
+representation from the data; the gap should grow at 50\% data.
+
+\paragraph{Finding.} It does, for both sizes (Table~\ref{tab:ablation},
+Figure~\ref{fig:ablation}). The gap at 50\% data is larger than at 100\% in every probe and
+label-fraction cell for both sizes, except for S with the linear SVM at 1\% labels, where it
+is unchanged (shift \AblShiftSLinOne~pp). With the linear SVM at 100\% labels the gap grows
+by \AblShiftSLinHundred~pp for S and \AblShiftLLinHundred~pp for L; at 1\% labels by
+\AblShiftSLinOne{} and \AblShiftLLinOne~pp. The change comes almost entirely from B: halving
+the budget costs B-S 3.0~pp (\AccBSFullLinHundred\% to \AccBSHalfLinHundred\%) and B-L 3.3~pp
+(\AccBLFullLinHundred\% to \AccBLHalfLinHundred\%), but C-S only 1.1~pp
+(\AccCSFullLinHundred\% to \AccCSHalfLinHundred\%) and C-L 1.3~pp (\AccCLFullLinHundred\%
+to \AccCLHalfLinHundred\%). The gap thus moves in the same direction for both sizes, and the
+shift is larger for L at low label fractions, an interaction between budget and size that
+favours distillation for the larger student when the budget is small.
+
+\subsection{Eval-only multi-scale probe}
+\label{sec:multiscale}
+
+Concatenating pooled stage-3 and stage-4 features (Table~\ref{tab:multiscale} in the appendix) adds about
+1~pp for B at 100\% labels (B-S \AccBSFullLinHundred\% to \AccMsCatBSFullLinHundred\%, B-L
+\AccBLFullLinHundred\% to \AccMsCatBLFullLinHundred\%) and nothing at 10\% labels; the
+untrained row A gains more. The dimension-matched random projection removes B-S's gain
+(\AccMsProjBSFullLinHundred\%) but only part of B-L's (\AccMsProjBLFullLinHundred\%), so for
+S the gain is extra probe capacity rather than extra information. For C, stage 3 adds nothing
+(\AccCSFullLinHundred\% vs.\ \AccMsCatCSFullLinHundred\%). Intermediate features therefore do
+not change the \CB{} comparison.
+
+% =====================================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Q6: Undertrained at this scale}
+\label{sec:q6}
+
+All runs are short by self-supervised standards (100 epochs on 100k or 50k images, batch
+256), and the results should be read as properties of this budget, not of the methods at
+convergence. Two committed measurements suggest that B is further from convergence than C.
+From the 20-epoch tuning runs to the 100-epoch reported runs (same configuration, S, 100\%
+data), B's validation $k$-NN rises from 72.4\% (\texttt{tuning/grid\_B.json}, width 2048,
+seeds 0--1) to \ValKnnBSFull\% (seeds 0--2), while C's rises only from 89.7\%
+(\texttt{tuning/grid\_C.json}) to \ValKnnCSFull\%; and halving the budget costs B about three
+times as much accuracy as C (Section~\ref{sec:ablation}). Both point the same way: with
+longer training or more data, B would likely gain more than C, and the gap would shrink.
+Whether it would close cannot be inferred from these runs. The size of the gap, especially
+at 100\% labels, should be interpreted with this, and with the teacher's exposure to
+ImageNet (below), in mind.
+
+\subsection{Confounds}
+\label{sec:confounds}
+
+\begin{itemize}
+  \item \textbf{Supervision source and objective.} C and B differ both in where the signal
+    comes from (a frozen teacher vs.\ the student's own views) and in the objective (cosine
+    distillation of a DINO-trained teacher vs.\ VICReg), so the gap cannot be attributed to
+    distillation alone. A DINO-trained convnet in B would remove the second difference; we
+    did not run it because DINO is costlier and more collapse-prone at small budgets.
+  \item \textbf{ImageNet overlap.} STL-10 images come from ImageNet, which the teacher saw
+    (without labels) during pretraining. This favours C and D and may explain part of the
+    teacher's \AccDLinHundred\% and of C's margin; we discuss it but did not run a second,
+    non-ImageNet dataset.
+  \item \textbf{Optimizer tuned on B.} The optimizer was tuned on B and copied to C, which
+    biases the comparison toward B; a C win is therefore conservative in this respect.
+  \item \textbf{Fixed views.} B and C train on the same 20 views per image; the cost of this
+    for B is measured in Section~\ref{sec:limitations}.
+  \item \textbf{Data and steps.} The ablation halves data and optimizer steps together
+    (Section~\ref{sec:ablation}).
+\end{itemize}
+
+\subsection{Limitations}
+\label{sec:limitations}
+
+\paragraph{Tuning proxy and search edges.} The Optuna study scored 20-epoch trials as a
+proxy for 100-epoch runs, and the head grid used the same proxy. The winning learning rate
+($2.86\cdot10^{-3}$) lies near the $3\cdot10^{-3}$ upper bound, and the best LARS
+configuration lies at the edge of its grid, so B might gain from a wider search. Given gaps
+of 10--20~pp, we do not expect this to change the sign of the result, but it may affect its
+size. The LARS check is one seed per configuration.
+
+\paragraph{Fixed views.} B draws 2 of 20 views per image per epoch, from $\binom{20}{2}=190$
+possible pairs, and sees each view about 10 times over 100 epochs; C sees each view about 5
+times, and its teacher targets cover only those 20 views. Fixed views can only weaken B
+relative to fresh augmentation: EMC$^2$ reports $K=10$ pre-generated views visibly below
+on-the-fly augmentation on STL-10 \todo{add a verified citation for EMC$^2$; it is not among
+the verified entries of issue \#4}, and we know of no VICReg-specific study. Our
+matched pair (B, S, 100\% data, seed 0) measured on-the-fly minus pool at
+$-0.2$~pp validation $k$-NN and $+0.2$~pp test $k$-NN (100\% labels, draw 0); this is one
+seed and one size. The consequence is that C's margin may be inflated by up to about
+0.2~pp in that configuration, negligible next to the measured gaps; we do not extrapolate
+it to L or to 50\% data. The 2~pp switch rule was fixed before the pair ran, and it did not
+fire.
+
+\paragraph{Spread and seeds.} L has two seeds, so its standard deviation is a poor estimate;
+the individual runs (Table~\ref{tab:l-runs}) agree within 1.2~pp, far below the gaps. Runs are
+not bitwise deterministic.
+
+\paragraph{Scope.} One dataset, one teacher, one direct method, two student sizes and two
+data settings. The absence of a crossover holds only within this range.
+
+\subsection{Departures from the brief and the plan}
+\label{sec:departures}
+
+\begin{enumerate}
+  \item \textbf{Label-draw variance.} The brief asks to include the label-subset draws in
+    the spread. We average the three draws within each seed before taking the seed standard
+    deviation, so that the spread compares training runs, which is what ``beyond the
+    seed-to-seed spread'' refers to; the draw variance is still visible in D's $\pm$.
+  \item \textbf{Ablation last.} The brief suggests running the cheaper reduced-data settings
+    first. We ran the main comparison first so that any schedule slip would cut the ablation
+    and never the main result. In the event nothing was cut.
+  \item \textbf{LARS check on the laptop.} The plan placed the LARS check on Kaggle; it ran on
+    the same laptop as everything else, which only makes its GPU time more comparable.
+  \item \textbf{$k$-NN probes before SVM selection.} The plan froze the SVM settings before
+    any C encoder was probed. The (untuned) $k$-NN probes of the C encoders ran before the
+    selection. This leaks nothing, since $k$-NN has no hyperparameters to select and the
+    selection sees only B-S-100-s0's training features; those rows were nevertheless deleted
+    and regenerated after the selection, with identical results.
+\end{enumerate}
+All 20 runs used the training configuration later tagged \texttt{configs-frozen}; it did
+not change between the runs and the tag (only the SVM settings were filled in afterwards,
+as planned).
+
+\subsection{Conclusion}
+
+At the scale a single laptop GPU allows, distilling a frozen DINO ViT-S/16 into a small
+ResNet beats training it with VICReg by 10--20~pp at every label fraction, for both student
+sizes and both data amounts, and the advantage grows when unlabeled data and steps are
+halved. The gap shrinks only marginally from 1.57M to 6.28M parameters, so the crossover
+predicted by the brief lies, if anywhere, beyond the tested sizes, data and epochs. Whether
+the detour is ``worth it'' depends entirely on accounting: with the teacher's pretraining
+charged, direct training is about three orders of magnitude more efficient per GPU-hour;
+with a public checkpoint treated as free, distillation gives more accuracy per GPU-hour in
+three of four settings. These conclusions hold for VICReg as the direct method, on an
+ImageNet-derived dataset, and at a budget at which B is likely undertrained.
+
+\paragraph{Reproducibility.} The repository regenerates every table and figure from the
+frozen configurations with \texttt{uv run mo433 all}; the 20 final checkpoints are
+published as a release. \todo{link the repository and the checkpoint release}
+
+% =====================================================================================
+{\small
+\setlength{\bibsep}{2pt}
+\bibliographystyle{plainnat}
+\bibliography{refs}
+}
+
+\appendix
+\section{Supplementary tables}
+\label{app:tables}
+
+Table~\ref{tab:l-runs} lists the individual large-student encoders behind the L rows of
+Table~\ref{tab:main-probes}; Table~\ref{tab:multiscale} gives the eval-only multi-scale probe
+of Section~\ref{sec:multiscale}.
+
+\input{generated/l_runs}
+\input{generated/multiscale}
 
 \end{document}
