@@ -15,9 +15,9 @@ optimizer:          # Optuna winner (spec §6.1, tuning/optuna_b.json); fallback
   betas: [0.9, 0.999]
 
 probe:              # null until SVM selection by 5-fold CV on B-S-100-s0 (spec §7.2)
-  linear_c: null
-  rbf_c: null
-  rbf_gamma: null
+  linear_c: 0.01
+  rbf_c: 100.0
+  rbf_gamma: scale
 
 profiles:           # applied last; --profile picks one
   full: {}
