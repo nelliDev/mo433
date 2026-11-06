@@ -26,13 +26,13 @@ in the features file); multi-scale probe rows go into ``results.csv`` with
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import numpy as np
 
 from mo433 import knn, paths, probe
+from mo433.config import parse_encoder_id
 
 SPREAD_MIN = 0.3
 TEACHER_REFERENCE_KNN = 0.745
@@ -133,13 +133,13 @@ def teacher_check(stats: CollapseStats) -> TeacherResult:
     return TeacherResult(passed=not any(reasons.values()), reasons=reasons, stats=stats)
 
 
-_RUN_ID = re.compile(r"^[BC]-([SL])-\d{3}-s(\d+)$")
-
-
 def anchor_id(encoder_id: str) -> str | None:
     """Row-A encoder at the same size and seed as run ``encoder_id`` (None for A and D)."""
-    m = _RUN_ID.match(encoder_id)
-    return f"A-{m.group(1)}-s{m.group(2)}" if m else None
+    try:
+        key = parse_encoder_id(encoder_id)
+    except ValueError:
+        return None
+    return f"A-{key.size}-s{key.seed}" if key.row in ("B", "C") else None
 
 
 def is_teacher(encoder_id: str) -> bool:

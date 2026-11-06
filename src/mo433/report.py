@@ -35,7 +35,6 @@ from __future__ import annotations
 import csv
 import json
 import math
-import re
 import shutil
 import warnings
 from collections import defaultdict
@@ -58,7 +57,7 @@ RESULTS_COLUMNS = (
     "draw",  # 0, 1, 2
     "probe",  # knn | linear_svm | rbf_svm
     "accuracy",  # test accuracy in [0, 1]
-    "svm_params_frozen",  # SVM rows: "True" / "False" (provisional); optional
+    "svm_params_frozen",  # SVM rows: True / False (provisional); optional
 )
 
 # costs.csv, written by `measure` (#23). One row per architecture; ``encoder_id`` may be
@@ -133,42 +132,9 @@ class Inputs:
 
 # ---------------------------------------------------------------- encoder ids
 
-_ID_PATTERNS = (
-    re.compile(r"^(?P<row>[BC])-(?P<size>[SL])-(?P<frac>\d{3})-s(?P<seed>\d+)$"),
-    re.compile(r"^(?P<row>A)-(?P<size>[SL])-s(?P<seed>\d+)$"),
-    re.compile(r"^(?P<row>D)$"),
-)
-
-
-@dataclass(frozen=True)
-class EncoderKey:
-    row: str
-    size: str | None
-    frac: int | None
-    seed: int | None
-
-    @property
-    def group(self) -> str:
-        """Encoder group = the id without the seed (A-S, B-S-100, D)."""
-        if self.row == "D":
-            return "D"
-        if self.row == "A":
-            return f"A-{self.size}"
-        return f"{self.row}-{self.size}-{self.frac:03d}"
-
-
-def parse_encoder(encoder_id: str) -> EncoderKey:
-    for pat in _ID_PATTERNS:
-        m = pat.match(encoder_id)
-        if m:
-            g = m.groupdict()
-            return EncoderKey(
-                g["row"],
-                g.get("size"),
-                int(g["frac"]) if g.get("frac") else None,
-                int(g["seed"]) if g.get("seed") is not None else None,
-            )
-    raise ValueError(f"not an encoder id: {encoder_id!r}")
+# One parser for every module (config.parse_encoder_id); the report's historical names.
+EncoderKey = config.EncoderId
+parse_encoder = config.parse_encoder_id
 
 
 def parse_group(group: str) -> EncoderKey:
@@ -288,18 +254,18 @@ def _read_csv(path: Path) -> list[dict]:
 
 
 def read_results(path: Path) -> list[dict]:
-    """Rows of ``results.csv``; unknown encoder ids are dropped with a warning."""
+    """Rows of ``results.csv`` as parsed by ``probe.read_results`` (which owns the schema);
+    unknown encoder ids are dropped with a warning."""
+    from mo433 import probe
+
     rows, bad = [], set()
-    for r in _read_csv(path):
+    for r in probe.read_results(path):
         try:
             parse_encoder(r["encoder_id"])
         except ValueError:
             bad.add(r["encoder_id"])
             continue
         r["feature_set"] = r.get("feature_set") or "main"
-        r["label_frac"] = int(r["label_frac"])
-        r["draw"] = int(r["draw"])
-        r["accuracy"] = float(r["accuracy"])
         rows.append(r)
     if bad:
         warnings.warn(f"results.csv: ignoring unknown encoder ids {sorted(bad)}", stacklevel=2)

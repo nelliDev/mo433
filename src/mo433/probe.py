@@ -37,7 +37,7 @@ from pathlib import Path
 
 import numpy as np
 
-from mo433 import paths, splits
+from mo433 import paths
 
 PROBES = ("knn", "linear_svm", "rbf_svm")
 FEATURE_SETS = ("main", "ms_concat", "ms_randproj")
@@ -168,6 +168,8 @@ def probe_features(
     can be chosen with ``train_key``/``test_key``). ``svm=None`` runs k-NN only.
     """
     from joblib import Parallel, delayed
+
+    from mo433 import splits  # imported here: it pulls in torch, and report reads results.csv via this module
 
     train_x, train_y = np.asarray(feats[train_key]), np.asarray(feats["train_y"])
     test_x, test_y = np.asarray(feats[test_key]), np.asarray(feats["test_y"])
@@ -408,6 +410,8 @@ def select_svm(
     Refuses (``SvmSelectionRefused``) once any C encoder has rows in ``results.csv``.
     Writes the full CV record to ``$MO433_ROOT/results/svm_selection.json``.
     """
+    from mo433 import splits
+
     probed = probed_c_encoders(profile)
     if probed:
         raise SvmSelectionRefused(

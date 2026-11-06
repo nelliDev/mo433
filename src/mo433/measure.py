@@ -58,7 +58,6 @@ from __future__ import annotations
 import csv
 import json
 import os
-import re
 import statistics
 import subprocess
 import time
@@ -68,6 +67,7 @@ import torch
 import torch.nn as nn
 
 from mo433 import paths
+from mo433.config import EncoderId, parse_encoder_id
 from mo433.students import build_student
 
 STUDENT_PX = 96
@@ -204,7 +204,14 @@ def query_gpu_processes() -> list[str] | None:
     return other_gpu_processes(res.stdout, os.getpid())
 
 
-_RUN_ID = re.compile(r"(?P<row>[BC])-(?P<size>[SL])-(?P<frac>\d{3})-s(?P<seed>\d+)")
+def _run_key(name: str) -> EncoderId | None:
+    """The B/C run a run directory belongs to; the fixed-view control's on-the-fly twin
+    ``<run_id>-otf`` (``mo433 train --on-the-fly``) counts as ``<run_id>``."""
+    try:
+        key = parse_encoder_id(name.removesuffix("-otf"))
+    except ValueError:
+        return None
+    return key if key.row in ("B", "C") else None
 
 
 def _read_json(path: Path) -> dict | None:
@@ -265,16 +272,16 @@ def run_costs(profile: str = "full") -> list[dict]:
         if secs is None:
             continue
         wall, gpu, complete = secs
-        m = _RUN_ID.match(rd.name)
-        row = m["row"] if m else None
+        key = _run_key(rd.name)
+        row = key.row if key else None
         charged = cache_s if row == "C" else 0.0
         out.append(
             {
                 "run_id": rd.name,
                 "row": row,
-                "size": m["size"] if m else None,
-                "frac": int(m["frac"]) if m else None,
-                "seed": int(m["seed"]) if m else None,
+                "size": key.size if key else None,
+                "frac": key.frac if key else None,
+                "seed": key.seed if key else None,
                 "complete": complete,
                 "wall_h": round(wall / 3600, 4),
                 "gpu_h": round(gpu / 3600, 4),
