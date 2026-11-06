@@ -301,9 +301,7 @@ bottleneck. (iii)~Teacher: the fp16 forward pass at 224 pixels ran at $\approx$1
 images/s, which would bottleneck an online-teacher C run and motivated the cache. With these rates, 20 runs of 100 epochs fit in
 an 18.7~GPU-h plan; the planning rule (the whole set within 30 wall-hours, so that it could
 be rerun once) allowed up to 123 epochs, and we used 100.
-\todo{the throughput figures in this paragraph come from issues \#6 and \#12 (bench results on
-unmerged branches task/env-throughput and task/student-throughput); commit those RESULTS
-files or cite the issues explicitly} A 5-epoch dry run on the real pool confirmed the plan:
+(Measurements: \texttt{bench/RESULTS.md} and \texttt{bench/STUDENT\_RESULTS.md}.) A 5-epoch dry run on the real pool confirmed the plan:
 GPU time per epoch was 45.2~s (B-S) and 17.8~s (C-S), the loader stalled training for
 about 1\% of the time, and the wall/GPU overhead was 1.10$\times$, below the 1.3$\times$
 threshold of the pre-registered slip rule, so no images or epochs were cut
