@@ -371,7 +371,7 @@ brief's criterion, however, charges C the teacher's published pretraining cost. 
 reports 1.16k GPU-h for 300 epochs of ViT-S/16 (Table~8 of~\citep{caron2021dino}); linear
 extrapolation to the released 800-epoch checkpoint gives \GpuHTeacherPretrain~GPU-h, an
 estimate rather than a published number. Charged this way, every C run carries the full pretraining estimate and yields $\approx$0.03 accuracy points per GPU-hour, against
-\AccPerGpuHBLHalf--\AccPerGpuHBSHalf{} for B: by this criterion the detour is not worth it,
+\AccPerGpuHBLFull--\AccPerGpuHBSHalf{} for B: by this criterion the detour is not worth it,
 by roughly three orders of magnitude, at both sizes and both data amounts. The same
 conclusion holds if accuracy is measured as the gain over row A rather than as raw
 accuracy, since the teacher's cost dominates C's denominator.
@@ -385,14 +385,10 @@ vs.\ \AccPerGpuHBLHalf), but not for S with 50\% data (\AccPerGpuHCSHalfNoPretra
 \AccPerGpuHBSHalf), where the fixed cache cost outweighs the short distillation run. This
 accounting is conservative for C: the cache was computed once and shared by all ten C runs,
 yet each run is charged all of it.
-Two measurement caveats apply. First, the GPU time recorded for B-L-050-s0
-(4.35~GPU-h) exceeds its wall time (1.37~h) and is three times that of its twin seed
-(1.35~GPU-h; \texttt{report/data/runs\_cost.csv}), which is impossible for a single-GPU run
-and points to a timing-record error. It inflates the B-L 50\% group mean, the B total and
-B-L 50\%'s accuracy per GPU-hour (about 60 with the wall-consistent value, still below C's
-\AccPerGpuHCLHalfNoPretrain); accuracy is unaffected.
-\todo{fix the GPU-time record of B-L-050-s0 in the run summary or in \texttt{mo433 report}
-and regenerate Table~\ref{tab:budget}; then drop this caveat} Second, the teacher-cache
+Two measurement notes apply. First, one epoch of B-L-050-s0 recorded an impossible GPU time
+(a single bad CUDA-event reading, 10.9k~s inside a 59~s epoch); \texttt{mo433 measure} caps
+each epoch's GPU time at its wall time, which affects only that epoch of that run
+(\texttt{gpu\_epochs\_clamped} in \texttt{report/data/runs\_cost.csv}). Second, the teacher-cache
 time was measured while the GPU was shared with other jobs, so it likely overstates the
 cache's cost; it is negligible next to the pretraining estimate either way.
 
