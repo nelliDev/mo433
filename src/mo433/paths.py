@@ -2,9 +2,9 @@
 
 Environment variables (all optional):
 
-- ``MO433_ROOT``: artifact root. Default ``<repo>/artifacts`` for the full profile and
-  ``<repo>/artifacts-smoke`` for the smoke profile. When set, it is used as-is for
-  every profile (point it somewhere else for smoke runs if you need both).
+- ``MO433_ROOT``: artifact root of the full profile. Default ``<repo>/artifacts``.
+- ``MO433_SMOKE_ROOT``: artifact root of the smoke profile. Default ``<repo>/artifacts-smoke``.
+  Smoke never uses ``$MO433_ROOT``, so a smoke ``--force`` run cannot touch full artifacts.
 - ``MO433_POOL``: view-pool directory (``chattr +C``). Default ``$MO433_ROOT/pool``.
 - ``MO433_DATA``: STL-10 root, the directory that contains ``stl10_binary/``.
   Default ``<repo>/data``. Set it in git worktrees, which lack the gitignored ``data/``.
@@ -22,6 +22,7 @@ CONFIGS_DIR = REPO_ROOT / "configs"
 SPLITS_DIR = REPO_ROOT / "splits"
 
 _DEFAULT_ROOT_NAME = {"full": "artifacts", "smoke": "artifacts-smoke"}
+_ROOT_ENV = {"full": "MO433_ROOT", "smoke": "MO433_SMOKE_ROOT"}
 
 
 def _env_path(name: str) -> Path | None:
@@ -30,10 +31,11 @@ def _env_path(name: str) -> Path | None:
 
 
 def artifacts_root(profile: str = "full") -> Path:
-    """``$MO433_ROOT``, or the profile's default directory under the repo."""
+    """``$MO433_ROOT`` (full) or ``$MO433_SMOKE_ROOT`` (smoke), else the profile's default
+    directory under the repo."""
     if profile not in _DEFAULT_ROOT_NAME:
         raise ValueError(f"unknown profile {profile!r}; expected one of {sorted(_DEFAULT_ROOT_NAME)}")
-    return _env_path("MO433_ROOT") or REPO_ROOT / _DEFAULT_ROOT_NAME[profile]
+    return _env_path(_ROOT_ENV[profile]) or REPO_ROOT / _DEFAULT_ROOT_NAME[profile]
 
 
 def pool_dir(profile: str = "full") -> Path:

@@ -11,9 +11,10 @@ from mo433 import paths
 
 @pytest.fixture
 def mo433_root(tmp_path, monkeypatch) -> Path:
-    """Point $MO433_ROOT at a fresh tmp dir so stages never touch real artifacts."""
+    """Point $MO433_ROOT and $MO433_SMOKE_ROOT at a fresh tmp dir so stages never touch real artifacts."""
     root = tmp_path / "artifacts"
     monkeypatch.setenv("MO433_ROOT", str(root))
+    monkeypatch.setenv("MO433_SMOKE_ROOT", str(root))
     monkeypatch.delenv("MO433_POOL", raising=False)
     return root
 
