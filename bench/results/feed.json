@@ -1,0 +1,12 @@
+{
+ "torch": "2.11.0+cu128",
+ "gpu": "NVIDIA GeForce RTX 3060 Laptop GPU",
+ "results": [
+  {
+   "pool": "20000x4",
+   "pool_GB": 2.21,
+   "workers": 0,
+   "pairs_per_s": 90060
+  }
+ ]
+}

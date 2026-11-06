@@ -1,0 +1,32 @@
+[
+  {
+    "images": 50000,
+    "workers": 4,
+    "pairs_per_s": 2144
+  },
+  {
+    "images": 50000,
+    "workers": 8,
+    "pairs_per_s": 24354
+  },
+  {
+    "images": 50000,
+    "workers": 14,
+    "pairs_per_s": 8280
+  },
+  {
+    "images": 100000,
+    "workers": 4,
+    "pairs_per_s": 471
+  },
+  {
+    "images": 100000,
+    "workers": 8,
+    "pairs_per_s": 510
+  },
+  {
+    "images": 100000,
+    "workers": 14,
+    "pairs_per_s": 518
+  }
+]
