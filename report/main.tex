@@ -1,9 +1,11 @@
 % MO433 report. Numbers come from generated/macros.tex and generated/*.tex (written by
 % `mo433 report` from results.csv and report/data/; never edit them) or are traceable to a
-% committed file named in a comment next to them. The course template has not been announced:
-% keep the sections self-contained so they can be moved into it. Build: latexmk -pdf main.tex
-\documentclass[10pt]{article}
-\usepackage[margin=2cm]{geometry}
+% committed file named in a comment next to them. Layout follows the course format
+% (https://www.ic.unicamp.br/~afalcao/mo433/node5.html): Letter, 11pt; cover page with course,
+% name, RA, delivery date and a summary of techniques and results; conclusion and suggestions
+% for improvement on the final page. Build: latexmk -pdf main.tex
+\documentclass[letterpaper,11pt]{article}
+\usepackage[letterpaper,margin=2cm]{geometry}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage{booktabs}
@@ -19,16 +21,27 @@
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
 \newcommand{\CB}{C$-$B}
 
-\title{Distilling Unsupervised Representations into Small Models:\\
-  Distillation from a Frozen DINO ViT vs.\ Direct VICReg Training on STL-10}
-\author{Jo\~ao Deltregia Martinelli\\ MO433 \todo{affiliation/format per course template}}
-\date{}
-
 \begin{document}
-\maketitle
 
-% =====================================================================================
-\begin{abstract}
+% Cover page (course format): course, student, RA, delivery date, then the summary.
+\begin{titlepage}
+  \centering
+  {\large Universidade Estadual de Campinas --- Instituto de Computa\c{c}\~ao\par}
+  {\large MO433 --- Aprendizado N\~ao Supervisionado\par}
+  {Prof.\ Alexandre Xavier Falc\~ao\par}
+  \vspace{1.5cm}
+  {\LARGE\bfseries Distilling Unsupervised Representations into Small Models:\par}
+  \vspace{0.3cm}
+  {\Large Distillation from a Frozen DINO ViT vs.\ Direct VICReg Training on STL-10\par}
+  \vspace{1.2cm}
+  {\large Jo\~ao Deltregia Martinelli\par}
+  {RA \todo{RA}\par}
+  \vspace{0.3cm}
+  {Delivery date: 30 November 2026\par}
+  \vspace{1.2cm}
+  \begin{minipage}{0.88\linewidth}
+  \section*{Summary}
+  \raggedright
 We test whether distilling a frozen self-supervised DINO ViT-S/16 into a small residual
 convnet (row C) beats training the same convnet from scratch with VICReg (row B) on STL-10,
 for two student sizes (1.57M and 6.28M parameters) and two amounts of unlabeled data (100\%
@@ -43,7 +56,8 @@ crossover appears in the range we can afford. The verdict reverses once the teac
 pretraining cost (an estimated \GpuHTeacherPretrain~GPU-h) is charged: per GPU-hour, direct
 training is about three orders of magnitude more efficient. All runs are short (100 epochs
 on a laptop GPU) and should be read as undertrained.
-\end{abstract}
+  \end{minipage}
+\end{titlepage}
 
 % =====================================================================================
 \section{Introduction}
@@ -484,7 +498,7 @@ favours distillation for the larger student when the budget is small.
 \subsection{Eval-only multi-scale probe}
 \label{sec:multiscale}
 
-Concatenating pooled stage-3 and stage-4 features (Table~\ref{tab:multiscale} in the appendix) adds about
+Concatenating pooled stage-3 and stage-4 features (Table~\ref{tab:multiscale}) adds about
 1~pp for B at 100\% labels (B-S \AccBSFullLinHundred\% to \AccMsCatBSFullLinHundred\%, B-L
 \AccBLFullLinHundred\% to \AccMsCatBLFullLinHundred\%) and nothing at 10\% labels; the
 untrained row A gains more. The dimension-matched random projection removes B-S's gain
@@ -492,6 +506,27 @@ untrained row A gains more. The dimension-matched random projection removes B-S'
 S the gain is extra probe capacity rather than extra information. For C, stage 3 adds nothing
 (\AccCSFullLinHundred\% vs.\ \AccMsCatCSFullLinHundred\%). Intermediate features therefore do
 not change the \CB{} comparison.
+
+\input{generated/l_runs}
+\input{generated/multiscale}
+
+% =====================================================================================
+\section{Difficulties and solutions}
+\label{sec:difficulties}
+
+\todo{write: difficulties met during the project and the solutions adopted (course format).}
+% Candidates from the repository history: 6 GB GPU -> fixed view pool + cached fp16 teacher
+% features (Sec. method); host RAM / systemd-oomd kills of parallel probe workers ->
+% MO433_N_JOBS cap and jobs in capped systemd units; a corrupted CUDA timing event in
+% B-L-050-s0 (epoch 85) -> per-epoch GPU time capped at wall time (issue #27); compressed
+% 4-week calendar -> ablation scheduled last, configs frozen before the 20 runs.
+
+\section{Use of generative AI tools}
+\label{sec:genai}
+
+\todo{required by the course: state which code parts or steps used generative AI tools.
+The course allows AI for code (documented here) but forbids it for writing the report,
+except for revising the text.}
 
 % =====================================================================================
 \section{Discussion}
@@ -587,7 +622,10 @@ All 20 runs used the training configuration later tagged \texttt{configs-frozen}
 not change between the runs and the tag (only the SVM settings were filled in afterwards,
 as planned).
 
-\subsection{Conclusion}
+% =====================================================================================
+\clearpage
+\section{Conclusion}
+\label{sec:conclusion}
 
 At the scale a single laptop GPU allows, distilling a frozen DINO ViT-S/16 into a small
 ResNet beats training it with VICReg by 10--20~pp at every label fraction, for both student
@@ -604,22 +642,21 @@ ImageNet-derived dataset, and at a budget at which B is likely undertrained.
 frozen configurations with \texttt{uv run mo433 all}; the 20 final checkpoints are
 published as a release. \todo{link the repository and the checkpoint release}
 
+\subsection{Suggestions for improvement}
+\label{sec:suggestions}
+
+\todo{write: suggestions for improving the study (course format requires them on the final
+page).}
+% Candidates already argued in the text: a DINO-trained convnet as row B (removes the
+% objective confound, Sec. confounds); a non-ImageNet dataset (teacher overlap); longer
+% training / more epochs (Sec. q6); a wider LR / LARS search (Sec. limitations); a third
+% seed for L; on-the-fly augmentation for B beyond the single matched pair.
+
 % =====================================================================================
 {\small
 \setlength{\bibsep}{2pt}
 \bibliographystyle{plainnat}
 \bibliography{refs}
 }
-
-\appendix
-\section{Supplementary tables}
-\label{app:tables}
-
-Table~\ref{tab:l-runs} lists the individual large-student encoders behind the L rows of
-Table~\ref{tab:main-probes}; Table~\ref{tab:multiscale} gives the eval-only multi-scale probe
-of Section~\ref{sec:multiscale}.
-
-\input{generated/l_runs}
-\input{generated/multiscale}
 
 \end{document}
