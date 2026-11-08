@@ -179,3 +179,18 @@ def test_latex_skeleton_compiles_with_generated_files(full, tmp_path):
     )
     assert proc.returncode == 0, proc.stdout[-3000:]
     assert (out / "main.pdf").exists()
+
+
+def test_second_dataset_namespaces_macros_labels_and_captions(tmp_path, monkeypatch):
+    # The EuroSAT tables go into the same main.tex as the STL-10 ones: nothing may collide.
+    monkeypatch.setenv("MO433_DATASET", "eurosat")
+    inputs = write_inputs(tmp_path / "repo")
+    out = tmp_path / "repo" / "report" / "eurosat"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        report.build_report(inputs, out, log=lambda s: None)
+    names = macros(out / "generated" / "macros.tex")
+    assert names and all(n.startswith("Eurosat") for n in names)
+    assert "EurosatAccBSFullLinTen" in names
+    main = (out / "generated" / "main_probes.tex").read_text()
+    assert r"\label{eurosat:tab:" in main and r"\caption{EuroSAT: " in main

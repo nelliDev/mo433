@@ -28,7 +28,7 @@ from mo433 import data, paths
 LABEL_FRACS = (1, 10, 50, 100)  # percent of the 5k labeled train split
 DRAWS = (0, 1, 2)
 N_FOLDS = 5
-ABLATION_SIZE = 50_000
+ABLATION_SIZE = 50_000  # STL-10; in general half the pool order (ablation_subset)
 
 
 def label_subset_name(frac: int, draw: int) -> str:
@@ -36,7 +36,7 @@ def label_subset_name(frac: int, draw: int) -> str:
 
 
 def generate(y_train: np.ndarray, n_unlabeled: int = data.N_UNLABELED) -> dict[str, np.ndarray]:
-    """Every index array, keyed by file stem. Pure: depends only on the labels."""
+    """Every index array, keyed by file stem. Pure: depends only on the labels and ``n_unlabeled``."""
     y_train = np.asarray(y_train)
     all_idx = np.arange(len(y_train))
     out: dict[str, np.ndarray] = {}
@@ -65,9 +65,9 @@ def generate(y_train: np.ndarray, n_unlabeled: int = data.N_UNLABELED) -> dict[s
 
 
 def write_splits(out_dir: Path | None = None, data_root: Path | None = None) -> Path:
-    out_dir = Path(out_dir) if out_dir is not None else paths.SPLITS_DIR
+    out_dir = Path(out_dir) if out_dir is not None else paths.splits_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
-    for name, arr in generate(data.train_labels(data_root)).items():
+    for name, arr in generate(data.train_labels(data_root), data.n_unlabeled(data_root)).items():
         np.save(out_dir / f"{name}.npy", arr, allow_pickle=False)
     print(f"wrote splits to {out_dir}")
     return out_dir
@@ -78,7 +78,7 @@ def write_splits(out_dir: Path | None = None, data_root: Path | None = None) -> 
 
 def load_split(name: str, splits_dir: Path | None = None) -> np.ndarray:
     """Load ``splits/<name>.npy`` (e.g. ``"val"``, ``"labels_010_d2"``)."""
-    splits_dir = Path(splits_dir) if splits_dir is not None else paths.SPLITS_DIR
+    splits_dir = Path(splits_dir) if splits_dir is not None else paths.splits_dir()
     return np.load(splits_dir / f"{name}.npy", allow_pickle=False)
 
 
@@ -98,8 +98,10 @@ def pool_order(splits_dir: Path | None = None) -> np.ndarray:
 
 
 def ablation_subset(splits_dir: Path | None = None) -> np.ndarray:
-    """Unlabeled image indices of the ablation subset = pool positions [0, 50k)."""
-    return pool_order(splits_dir)[:ABLATION_SIZE]
+    """Unlabeled image indices of the ablation subset = the first half of the pool positions
+    ([0, 50k) for STL-10)."""
+    order = pool_order(splits_dir)
+    return order[: len(order) // 2]
 
 
 def cv_folds(splits_dir: Path | None = None) -> list[tuple[np.ndarray, np.ndarray]]:

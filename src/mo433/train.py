@@ -336,8 +336,9 @@ class _OnTheFlyEpoch(torch.utils.data.Dataset):
 
 
 def _unlabeled_images() -> np.ndarray:
-    raw = np.memmap(paths.stl10_binary_dir() / "unlabeled_X.bin", dtype=np.uint8, mode="r")
-    return raw.reshape(-1, 3, 96, 96).transpose(0, 3, 2, 1)
+    from mo433.data import read_images
+
+    return read_images(paths.stl10_binary_dir() / "unlabeled_X.bin")
 
 
 def _view_transform():

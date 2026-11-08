@@ -15,22 +15,60 @@ import torch
 
 from mo433 import paths
 
-N_LABELED_TRAIN = 5_000
-N_UNLABELED = 100_000
+N_LABELED_TRAIN = 5_000  # STL-10; other datasets: len(train_labels())
+N_UNLABELED = 100_000  # STL-10; other datasets: n_unlabeled()
 N_CLASSES = 10
+IMAGE_BYTES = 96 * 96 * 3
+STL10_CLASSES = ("airplane", "bird", "car", "cat", "deer", "dog", "horse", "monkey", "ship", "truck")
+# torchvision.datasets.EuroSAT label order (sorted folder names).
+EUROSAT_CLASSES = ("AnnualCrop", "Forest", "HerbaceousVegetation", "Highway", "Industrial", "Pasture",
+                   "PermanentCrop", "Residential", "River", "SeaLake")
+DEFAULT_CLASSES = {"stl10": STL10_CLASSES, "eurosat": EUROSAT_CLASSES}
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
 
+def _binary_dir(data_root: Path | None = None) -> Path:
+    return (Path(data_root) if data_root is not None else paths.data_root()) / "stl10_binary"
+
+
 def train_labels(data_root: Path | None = None) -> np.ndarray:
-    """Labels of the 5k labeled train split, 0-based, identical to
+    """Labels of the labeled train split, 0-based, identical to
     ``torchvision.datasets.STL10(data_root, split="train").labels`` but without reading images."""
-    root = Path(data_root) if data_root is not None else paths.data_root()
-    raw = np.fromfile(root / "stl10_binary" / "train_y.bin", dtype=np.uint8)
-    if raw.shape != (N_LABELED_TRAIN,):
-        raise ValueError(f"unexpected train_y.bin shape {raw.shape}")
+    d = _binary_dir(data_root)
+    raw = np.fromfile(d / "train_y.bin", dtype=np.uint8)
+    images = d / "train_X.bin"
+    if images.exists() and images.stat().st_size != len(raw) * IMAGE_BYTES:
+        raise ValueError(f"train_y.bin has {len(raw)} labels but train_X.bin does not hold that many images")
     return raw.astype(np.int64) - 1
+
+
+def n_unlabeled(data_root: Path | None = None) -> int:
+    """Number of images in ``unlabeled_X.bin`` (100k for STL-10; the train split for EuroSAT)."""
+    f = _binary_dir(data_root) / "unlabeled_X.bin"
+    if not f.exists() and paths.dataset() == "stl10":
+        return N_UNLABELED
+    size = f.stat().st_size
+    if size % IMAGE_BYTES:
+        raise ValueError(f"{f}: {size} bytes is not a whole number of 96x96x3 images")
+    return size // IMAGE_BYTES
+
+
+def class_names(data_root: Path | None = None) -> tuple[str, ...]:
+    """Class names in label order, from ``class_names.txt`` (shipped with STL-10, written for
+    EuroSAT), else the current dataset's known names (so the report builds without the data)."""
+    f = _binary_dir(data_root) / "class_names.txt"
+    if not f.exists():
+        return DEFAULT_CLASSES[paths.dataset()]
+    return tuple(line.strip() for line in f.read_text().splitlines() if line.strip())
+
+
+def read_images(path: Path) -> np.ndarray:
+    """A ``*_X.bin`` file as a read-only uint8 ``[N, 96, 96, 3]`` (HWC) memmap view.
+    The binary is column-major per image: ``[N, C, W, H]`` -> ``[N, H, W, C]``."""
+    raw = np.memmap(path, dtype=np.uint8, mode="r")
+    return raw.reshape(-1, 3, 96, 96).transpose(0, 3, 2, 1)
 
 
 def normalize(u8: torch.Tensor) -> torch.Tensor:
@@ -47,15 +85,17 @@ def normalize(u8: torch.Tensor) -> torch.Tensor:
 
 
 def load_stl10(split: str) -> tuple[torch.Tensor, torch.Tensor]:
-    """A labeled STL-10 split as ``(images uint8 [N, 96, 96, 3], labels int64 [N])`` on CPU.
+    """A labeled split in the STL-10 binary layout as ``(images uint8 [N, 96, 96, 3], labels int64 [N])``
+    on CPU, pixel-identical to ``torchvision.datasets.STL10`` (which also MD5-checks the files and
+    so cannot read the EuroSAT copy).
 
-    ``split`` is ``"train"`` (5k) or ``"test"`` (8k). Reads ``$MO433_DATA/stl10_binary``.
+    ``split`` is ``"train"`` or ``"test"``. Reads ``<data root>/stl10_binary`` of the current dataset.
     """
-    from torchvision.datasets import STL10
-
     if split not in ("train", "test"):
         raise ValueError(f"unknown labeled split {split!r}; expected 'train' or 'test'")
-    ds = STL10(str(paths.data_root()), split=split, download=False)
-    images = torch.from_numpy(np.ascontiguousarray(ds.data.transpose(0, 2, 3, 1)))
-    labels = torch.from_numpy(ds.labels.astype(np.int64))
+    d = _binary_dir()
+    images = torch.from_numpy(np.ascontiguousarray(read_images(d / f"{split}_X.bin")))
+    labels = torch.from_numpy(np.fromfile(d / f"{split}_y.bin", dtype=np.uint8).astype(np.int64) - 1)
+    if len(images) != len(labels):
+        raise ValueError(f"{split}: {len(images)} images but {len(labels)} labels")
     return images, labels

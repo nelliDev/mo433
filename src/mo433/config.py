@@ -4,7 +4,8 @@ Resolution order, later wins:
 
 1. ``configs/base.yaml`` (shared settings; its ``profiles:`` table is set aside),
 2. ``configs/<row>-<size>.yaml`` when a row and size are given,
-3. ``profiles.<profile>`` from ``base.yaml`` (``smoke`` shrinks N, K and E).
+3. ``configs/datasets/<dataset>.yaml`` when ``$MO433_DATASET`` is not the main ``stl10``,
+4. ``profiles.<profile>`` from ``base.yaml`` (``smoke`` shrinks N, K and E).
 
 Every key must name a dataclass field: unknown keys, missing keys and wrong types raise
 ``ConfigError``. Seed and data fraction are CLI arguments, never config keys.
@@ -27,6 +28,7 @@ from mo433 import paths
 PROFILES = ("full", "smoke")
 ROWS = ("B", "C")
 SIZES = ("S", "L")
+EXTRA_SIZES = ("XS", "M")  # extra-sizes study (mo433.extras); never in the reported runs
 FRACS = (100, 50)  # unlabeled-data percent; 50 = the ablation subset
 
 
@@ -152,12 +154,18 @@ def load_config(
 
     merged = base
     if row is not None:
-        if row not in ROWS or size not in SIZES:
+        if row not in ROWS or size not in SIZES + EXTRA_SIZES:
             raise ConfigError(f"unknown row/size {row!r}/{size!r}")
         override = _read_yaml(configs_dir / f"{row}-{size}.yaml")
         if (override.get("row"), override.get("size")) != (row, size):
             raise ConfigError(f"{row}-{size}.yaml must declare row: {row} and size: {size}")
         merged = _deep_merge(merged, override)
+    if paths.dataset() != paths.DEFAULT_DATASET:
+        overlay = _read_yaml(configs_dir / "datasets" / f"{paths.dataset()}.yaml")
+        unknown = set(overlay) - {f.name for f in dataclasses.fields(Config)}
+        if unknown:
+            raise ConfigError(f"datasets/{paths.dataset()}.yaml: unknown keys {sorted(unknown)}")
+        merged = _deep_merge(merged, overlay)
     merged = _deep_merge(merged, profiles.get(profile) or {})
     merged["profile"] = profile
     return _build(Config, merged, "config")

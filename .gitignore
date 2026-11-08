@@ -7,6 +7,8 @@ __pycache__/
 *.pyc
 artifacts/
 artifacts-smoke/
+artifacts-eurosat/
+artifacts-eurosat-smoke/
 .claude/
 *.egg-info
 .pytest_cache/

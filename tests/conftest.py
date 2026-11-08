@@ -10,6 +10,14 @@ import pytest
 from mo433 import paths
 
 
+@pytest.fixture(autouse=True)
+def _main_dataset(monkeypatch):
+    """Tests run on the main dataset unless they set $MO433_DATASET themselves: another dataset
+    ignores $MO433_ROOT (paths), so an inherited MO433_DATASET=eurosat would let stage tests
+    write into the repo's artifacts-eurosat/."""
+    monkeypatch.delenv("MO433_DATASET", raising=False)
+
+
 @pytest.fixture
 def mo433_root(tmp_path, monkeypatch) -> Path:
     """Point $MO433_ROOT and $MO433_SMOKE_ROOT at a fresh tmp dir so stages never touch real artifacts."""

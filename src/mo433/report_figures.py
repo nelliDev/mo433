@@ -31,7 +31,6 @@ SIZE_STYLE = {"S": "--", "L": "-", None: ":"}
 FRAC_COLOR = {1: "#56B4E9", 10: "#009E73", 50: "#E69F00", 100: "#CC79A7"}
 CLASS_COLORS = ["#CC6677", "#332288", "#DDCC77", "#117733", "#88CCEE",
                 "#882255", "#44AA99", "#999933", "#AA4499", "#555555"]  # Tol muted + dark grey
-STL10_CLASSES = ("airplane", "bird", "car", "cat", "deer", "dog", "horse", "monkey", "ship", "truck")
 PANEL_TITLE = {"A": "A: random init", "B": "B: VICReg", "C": "C: distilled", "D": "D: DINO ViT-S/16"}
 
 
@@ -91,6 +90,9 @@ def tsne_panels(data: ReportData, path: Path) -> Path | None:
     if not any(e in data.tsne for e in TSNE_PANELS):
         warnings.warn("t-SNE figure: no coordinates in report/data/tsne.npz; skipped", stacklevel=2)
         return None
+    from mo433.data import class_names
+
+    classes = class_names()
     plt = _plt()
     fig, axes = plt.subplots(1, 4, figsize=(8.0, 2.4))
     for ax, eid in zip(axes, TSNE_PANELS):
@@ -107,9 +109,9 @@ def tsne_panels(data: ReportData, path: Path) -> Path | None:
         for k in range(10):
             sel = y == k
             ax.scatter(xy[sel, 0], xy[sel, 1], s=1.0, color=CLASS_COLORS[k], linewidths=0, rasterized=True,
-                       label=STL10_CLASSES[k])
+                       label=classes[k])
     handles = [plt.Line2D([], [], marker="o", ls="", color=CLASS_COLORS[k], ms=4) for k in range(10)]
-    fig.legend(handles, STL10_CLASSES, loc="lower center", ncol=10, fontsize=6.5, bbox_to_anchor=(0.5, -0.06))
+    fig.legend(handles, classes, loc="lower center", ncol=10, fontsize=6.5, bbox_to_anchor=(0.5, -0.06))
     return _save(fig, path)
 
 

@@ -104,7 +104,7 @@ SPEC_PARAMS = {"S": 1.57e6, "L": 6.28e6, "D": 21.67e6}
 
 
 def report_dir() -> Path:
-    return paths.REPO_ROOT / "report"
+    return paths.report_dir()
 
 
 @dataclass(frozen=True)
@@ -120,9 +120,11 @@ class Inputs:
     @classmethod
     def committed(cls, repo_root: Path | None = None) -> Inputs:
         root = Path(repo_root) if repo_root is not None else paths.REPO_ROOT
-        data = root / "report" / "data"
+        # The main study keeps results.csv at the repo root; another dataset keeps it beside its data.
+        rel = paths.report_dir().relative_to(paths.REPO_ROOT)
+        data = root / rel / "data"
         return cls(
-            results=root / "results.csv",
+            results=root / "results.csv" if paths.dataset() == paths.DEFAULT_DATASET else root / rel / "results.csv",
             costs=data / "costs.csv",
             runs_cost=data / "runs_cost.csv",
             diagnostics=data / "diagnostics.csv",
