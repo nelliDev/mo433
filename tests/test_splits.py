@@ -10,11 +10,11 @@ from mo433 import paths, splits
 @pytest.mark.data
 def test_regenerating_matches_committed_splits_byte_for_byte(tmp_path):
     splits.write_splits(out_dir=tmp_path)
-    committed = sorted(p.name for p in paths.SPLITS_DIR.glob("*.npy"))
+    committed = sorted(p.name for p in paths.splits_dir().glob("*.npy"))
     regenerated = sorted(p.name for p in tmp_path.glob("*.npy"))
     assert committed and committed == regenerated
     for name in committed:
-        assert (paths.SPLITS_DIR / name).read_bytes() == (tmp_path / name).read_bytes(), name
+        assert (paths.splits_dir() / name).read_bytes() == (tmp_path / name).read_bytes(), name
 
 
 @pytest.mark.data

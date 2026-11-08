@@ -1,0 +1,5 @@
+# Second-dataset extra (MO433_DATASET=eurosat): applied after the row/size file, before the
+# profile. Everything else (optimizer, heads, K, E, probes) is the frozen STL-10 setting,
+# reused untuned on purpose. EuroSAT has no unlabeled split, so the pool is the whole
+# 21.6k-image train split with labels discarded (brief §4.2); see mo433.eurosat.
+n_images: 21600

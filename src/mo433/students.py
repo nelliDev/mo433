@@ -14,7 +14,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-WIDTHS = {"S": 24, "L": 48}
+WIDTHS = {"S": 24, "L": 48, "XS": 12, "M": 34}  # XS and M: the extra-sizes study (mo433.extras) only
 DEPTHS = (2, 2, 2, 2)
 
 

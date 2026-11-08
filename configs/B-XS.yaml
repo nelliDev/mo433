@@ -1,0 +1,5 @@
+# Row B, size XS: extra-sizes study only (mo433.extras), added after the freeze. Overrides configs/base.yaml.
+row: B
+size: XS
+student_width: 12   # ResNet96 base width w (feature dim 8w), same scaling rule as S/L (spec §4.2)
+head_width: 2048

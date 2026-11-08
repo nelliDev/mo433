@@ -63,6 +63,13 @@ def _splits(ctx: Context, args: argparse.Namespace) -> None:
     splits.write_splits()  # committed outputs: always regenerated, no .done marker
 
 
+@command("prepare-eurosat", help="download EuroSAT and write its 96 px STL-10-layout copy to data/eurosat (extra)")
+def _prepare_eurosat(ctx: Context, args: argparse.Namespace) -> None:
+    from mo433 import eurosat
+
+    eurosat.prepare()  # then run the pipeline with MO433_DATASET=eurosat
+
+
 @command("pool", help="write the K-view pool memmap (spec §3)")
 def _pool(ctx: Context, args: argparse.Namespace) -> None:
     from mo433 import pool
@@ -367,7 +374,22 @@ def _report(ctx: Context, args: argparse.Namespace) -> None:
     inputs = report.Inputs.committed(root)
     if not getattr(args, "no_sync", False):
         report.sync_inputs(ctx.profile, inputs)
-    report.build_report(inputs, (root / "report") if root else None)
+    report.build_report(inputs, (root / paths.report_dir().relative_to(paths.REPO_ROOT)) if root else None)
+
+
+def _extra_args(p: argparse.ArgumentParser) -> None:
+    from mo433 import extras
+
+    p.add_argument("study", choices=sorted(extras.STUDIES), help="long300 = S at E=300; sizes = XS and M students")
+    p.add_argument("--train-only", action="store_true", help="train missing runs, skip probing")
+
+
+@command("extra", help="post-freeze extra experiments: train, probe, write report/extras/<study>.csv",
+         add_args=_extra_args)
+def _extra(ctx: Context, args: argparse.Namespace) -> None:
+    from mo433 import extras
+
+    extras.run(args.study, profile=ctx.profile, train_only=args.train_only)
 
 
 # ---------------------------------------------------------------- tuning
