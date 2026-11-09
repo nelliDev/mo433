@@ -1,0 +1,4 @@
+encoder_id,kind,rows,params,flops,macs,feature_dim,input_px,gpu_batch,gpu_latency_ms,gpu_latency_ms_sd,gpu_throughput_img_s,cpu_threads,cpu_latency_ms,cpu_latency_ms_sd,gpu_name,gpu_other_processes,cpu_load1,provisional,provisional_reason,measured_at
+S,student,A/B/C-S,1573272,353341440,176670720,192,96,256,22.26,0.262,11500.6,16,2.502,0.208,NVIDIA GeForce RTX 3060 Laptop GPU,271494 /usr/bin/nautilus 54 MiB,6.77,True,other GPU processes running; CPU load 6.8 > 4,2026-11-09T01:28:16-0300
+L,student,A/B/C-L,6284592,1407393792,703696896,384,96,256,57.831,0.423,4426.7,16,5.96,2.746,NVIDIA GeForce RTX 3060 Laptop GPU,271494 /usr/bin/nautilus 54 MiB,5.89,True,other GPU processes running; CPU load 5.9 > 4,2026-11-09T01:28:16-0300
+D,teacher,D,21665664,8481669120,4240834560,384,224,256,456.957,2.231,560.2,16,32.816,4.857,NVIDIA GeForce RTX 3060 Laptop GPU,271494 /usr/bin/nautilus 54 MiB,2.99,True,other GPU processes running,2026-11-09T01:28:16-0300
