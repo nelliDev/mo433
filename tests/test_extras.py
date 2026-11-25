@@ -48,3 +48,14 @@ def test_extra_run_ids_never_collide_with_the_main_runs():
     for study in extras.STUDIES.values():
         for r in study.runs:
             assert extras.run_dir(study.name, r).parts[-3:-1] == ("extras", study.name)
+
+
+def test_lejepa_study_is_row_j_on_s_with_b_and_c_references():
+    st = extras.STUDIES["lejepa"]
+    assert [(r.row, r.size, r.frac, r.seed, r.epochs) for r in st.runs] == [("J", "S", 100, 0, None), ("J", "S", 100, 1, None)]
+    assert set(st.reference_runs) == {"B-S-100-s0", "C-S-100-s0", "B-S-100-s1", "C-S-100-s1"}
+    assert config.ROWS == ("B", "C")  # the frozen study is unchanged
+    j, b = config.load_config("J", "S"), config.load_config("B", "S")
+    assert (j.student_width, j.epochs, j.optimizer, j.head_width, j.batch_size) == (
+        b.student_width, b.epochs, b.optimizer, b.head_width, b.batch_size)
+    assert config.parse_encoder_id("J-S-100-s1").row == "J"

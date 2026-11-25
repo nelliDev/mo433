@@ -173,6 +173,10 @@ def test_cli_report_runs_without_gpu_or_torch(tmp_path):
 def test_latex_skeleton_compiles_with_generated_files(full, tmp_path):
     _, out, _ = full
     shutil.copy(paths.REPO_ROOT / "report" / "main.tex", out / "main.tex")
+    # The extras section inputs `mo433 report-extras` outputs (own tests); use the committed ones.
+    for sub, pattern in (("generated", "extras_*.tex"), ("figures", "extras_*.pdf")):
+        for f in (paths.REPO_ROOT / "report" / sub).glob(pattern):
+            shutil.copy(f, out / sub / f.name)
     proc = subprocess.run(
         ["latexmk", "-pdf", "-interaction=nonstopmode", "-halt-on-error", "main.tex"],
         cwd=out, capture_output=True, text=True, timeout=300,

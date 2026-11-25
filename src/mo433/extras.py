@@ -8,6 +8,9 @@ the 20 reported runs, ``results.csv`` or ``artifacts/runs``:
   "direct training catches up as the epochs grow" (Q6) directly.
 - ``sizes``: two more student sizes, XS (w=12) and M (w=34), by the same width rule as S/L,
   B and C, seeds 0-1, 100% data, E = 100. Adds points to the gap-vs-parameters plot (Q5).
+- ``lejepa``: row J = LeJEPA (``mo433.train_j``) on S, seeds 0-1, 100% data, E = 100, same two
+  views and optimizer as B. Is the B-vs-C gap VICReg's or direct training's? Run it per dataset
+  (``MO433_DATASET=eurosat`` writes under ``report/eurosat/extras``).
 
 Layout: run dirs and features under ``<artifacts root>/extras/<study>/``; committed outputs
 ``report/extras/<study>.csv`` (probe rows, ``RESULTS_COLUMNS`` plus ``study``/``epochs``) and
@@ -57,6 +60,8 @@ STUDIES = {
               reference_runs=tuple(config.run_id(row, "S", 100, seed) for seed in (0, 1) for row in config.ROWS)),
         Study("sizes", tuple(ExtraRun(row, size, 100, seed)
                              for size in config.EXTRA_SIZES for seed in (0, 1) for row in config.ROWS)),
+        Study("lejepa", tuple(ExtraRun("J", "S", 100, seed) for seed in (0, 1)),
+              reference_runs=tuple(config.run_id(row, "S", 100, seed) for seed in (0, 1) for row in config.ROWS)),
     )
 }
 

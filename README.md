@@ -184,6 +184,17 @@ into the same `main.tex`.
 |---|---|---|
 | `long300` | B-S, C-S, seeds 0–1 | E = 300 instead of 100 |
 | `sizes` | B and C at XS (w=12) and M (w=34), seeds 0–1 | two more widths, same scaling rule |
+| `lejepa` | row J = LeJEPA on S, seeds 0–1 | another direct objective instead of VICReg |
+
+Row J (`src/mo433/train_j.py`) is LeJEPA (Balestriero & LeCun, 2025): SIGReg (sliced
+Epps-Pulley test towards an isotropic Gaussian, 256 slices) plus the view-prediction term,
+with the reference defaults untuned (λ = 0.05, projector `MLP(d, [2048, 2048, 128])`), the same
+two pool views as row B and the frozen optimizer. Run it per dataset;
+`MO433_DATASET=eurosat uv run mo433 extra lejepa` writes under `report/eurosat/extras/`.
+
+`uv run mo433 report-extras` (no GPU, no torch) turns the committed extra CSVs of both
+datasets into `report/generated/extras_*.tex` (tables, `\Ext...` macros) and
+`report/figures/extras_*.pdf`, input by the "Extra experiments" section of `main.tex`.
 
 Each trains what is missing under `artifacts/extras/<study>/`, probes with the frozen SVMs
 and writes `report/extras/<study>.csv` (probe rows) and `report/extras/<study>_curves.csv`

@@ -359,6 +359,15 @@ def _report_args(p: argparse.ArgumentParser) -> None:
 SMOKE_REPORT_ROOT = "report-repo"  # under the smoke artifact root: stands in for the repo
 
 
+@command("report-extras", help="extra-experiment CSVs -> report/generated/extras_*.tex and figures (no torch)")
+def _report_extras(ctx: Context, args: argparse.Namespace) -> None:
+    from mo433 import paths, report_extras
+
+    if paths.dataset() != paths.DEFAULT_DATASET:
+        raise SystemExit("report-extras reads both datasets itself; run it without MO433_DATASET")
+    report_extras.build()
+
+
 @command("report", help="results.csv -> LaTeX tables, macros and figures (spec §9)", add_args=_report_args)
 def _report(ctx: Context, args: argparse.Namespace) -> None:
     # Committed outputs: always regenerated, no .done marker (like `splits`). Never imports torch.

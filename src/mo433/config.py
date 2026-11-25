@@ -29,6 +29,7 @@ PROFILES = ("full", "smoke")
 ROWS = ("B", "C")
 SIZES = ("S", "L")
 EXTRA_SIZES = ("XS", "M")  # extra-sizes study (mo433.extras); never in the reported runs
+EXTRA_ROWS = ("J",)  # LeJEPA (mo433.train_j, extras study "lejepa"); never in the reported runs
 FRACS = (100, 50)  # unlabeled-data percent; 50 = the ablation subset
 
 
@@ -79,7 +80,7 @@ def run_id(row: str, size: str, frac: int, seed: int) -> str:
 
 
 _ENCODER_ID_PATTERNS = (
-    re.compile(r"(?P<row>[BC])-(?P<size>[SL])-(?P<frac>\d{3})-s(?P<seed>\d+)"),
+    re.compile(r"(?P<row>[BCJ])-(?P<size>XS|S|M|L)-(?P<frac>\d{3})-s(?P<seed>\d+)"),
     re.compile(r"(?P<row>A)-(?P<size>[SL])-s(?P<seed>\d+)"),
     re.compile(r"(?P<row>D)"),
 )
@@ -154,7 +155,7 @@ def load_config(
 
     merged = base
     if row is not None:
-        if row not in ROWS or size not in SIZES + EXTRA_SIZES:
+        if row not in ROWS + EXTRA_ROWS or size not in SIZES + EXTRA_SIZES:
             raise ConfigError(f"unknown row/size {row!r}/{size!r}")
         override = _read_yaml(configs_dir / f"{row}-{size}.yaml")
         if (override.get("row"), override.get("size")) != (row, size):
