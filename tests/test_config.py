@@ -111,3 +111,14 @@ def test_parse_encoder_id_round_trips_run_id_and_reads_a_and_d():
     for bad in ("B-S-100-s0-fv-otf", "B-S-100-s0-otf", "X-S-s0", "B-S-100"):
         with pytest.raises(ValueError):
             parse_encoder_id(bad)
+
+
+def test_dataset_overlay_applies_after_row_and_before_profile(monkeypatch):
+    # EuroSAT pools its whole train split; smoke still shrinks everything.
+    monkeypatch.setenv("MO433_DATASET", "eurosat")
+    full = load_config("B", "S", "full")
+    assert full.n_images == 21_600
+    assert full.epochs == 100 and full.student_width == 24
+    assert load_config("B", "S", "smoke").n_images == 2_000
+    monkeypatch.setenv("MO433_DATASET", "stl10")
+    assert load_config("B", "S", "full").n_images == 100_000

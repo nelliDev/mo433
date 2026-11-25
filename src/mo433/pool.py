@@ -48,10 +48,13 @@ def pool_order() -> np.ndarray:
 
     Read from ``splits/`` when the splits module provides it; otherwise recomputed from the
     spec §12 seed (the two are asserted equal when both exist)."""
-    order = np.random.default_rng(POOL_ORDER_SEED).permutation(N_UNLABELED)
+    from mo433 import data
+
+    n = data.n_unlabeled()
+    order = np.random.default_rng(POOL_ORDER_SEED).permutation(n)
     committed = _committed_pool_order()
     if committed is not None and not np.array_equal(committed, order):
-        raise ValueError("splits/ pool order differs from default_rng(0).permutation(100_000)")
+        raise ValueError(f"splits/ pool order differs from default_rng(0).permutation({n})")
     return order
 
 
@@ -76,9 +79,9 @@ def order_hash(order: np.ndarray) -> str:
 def unlabeled_images(data_root: Path) -> np.ndarray:
     """All 100k unlabeled STL-10 images as a read-only uint8 ``[N, 96, 96, 3]`` (HWC) view of
     ``unlabeled_X.bin``; pixel-identical to ``torchvision.datasets.STL10(split="unlabeled")``."""
-    raw = np.memmap(Path(data_root) / "stl10_binary" / "unlabeled_X.bin", dtype=np.uint8, mode="r")
-    # The binary is column-major per image: [N, C, W, H] -> [N, H, W, C].
-    return raw.reshape(-1, 3, 96, 96).transpose(0, 3, 2, 1)
+    from mo433 import data
+
+    return data.read_images(Path(data_root) / "stl10_binary" / "unlabeled_X.bin")
 
 
 def make_transform():

@@ -59,6 +59,7 @@ The code loads it with `torchvision.datasets.STL10(<data root>, download=False)`
 | `MO433_DATA` | directory that contains `stl10_binary/` | `data/` |
 | `MO433_NUM_WORKERS` | data-loader workers for `pool` and training runs (cap it on a shared machine) | 14 (`pool`), 8 (training) |
 | `MO433_N_JOBS` | joblib workers for probes and diagnostics | 6 |
+| `MO433_DATASET` | `stl10` (the main study) or `eurosat` (second-dataset extra, below) | `stl10` |
 
 ## Reproducing every table and figure
 
@@ -152,6 +153,41 @@ seeds; D (one checkpoint) shows mean ± sd over the draws, with a footnote. A C 
 "beyond spread" only if it exceeds the larger of B's and C's seed sd. Missing encoders,
 runs or inputs are skipped with a warning (tables show `--`, macros a bold `??`), so the
 report can be regenerated as runs land.
+
+## Extra experiments (after the freeze)
+
+Run after the 20 reported runs, with the frozen settings plus one declared change each, and
+reported apart from the main study. None of them touches `results.csv`, `artifacts/runs` or
+the frozen configs.
+
+**Second dataset, EuroSAT** (brief §4.2: a non-ImageNet dataset as a second experiment).
+`mo433 prepare-eurosat` downloads EuroSAT RGB (torchvision's MD5-checked mirror) and writes a
+96 px copy in the STL-10 binary layout to `data/eurosat/`: a stratified 80/20 split (21.6k
+images, all of them the unlabeled pool, labels discarded; 5.4k test), and a stratified 5k
+subset of the 21.6k as the labeled train split, mirroring STL-10's 5k. Then the unchanged
+pipeline runs on it with every setting of the STL-10 study (untuned; only `n_images` differs,
+`configs/datasets/eurosat.yaml`):
+
+```bash
+uv run mo433 prepare-eurosat
+MO433_DATASET=eurosat uv run mo433 all   # splits/eurosat, artifacts-eurosat/, report/eurosat/
+```
+
+`MO433_DATASET=eurosat` ignores `MO433_ROOT`, `MO433_SMOKE_ROOT`, `MO433_POOL` and `MO433_DATA`,
+which belong to the main study. Its generated macros, table labels and captions are prefixed
+(`\EurosatAccCSFullLinTen`, `eurosat:tab:main-probes`, "EuroSAT: ...") so they can be input
+into the same `main.tex`.
+
+**Longer training and more student sizes** (`mo433 extra <study>`, `src/mo433/extras.py`):
+
+| Study | Runs | Change |
+|---|---|---|
+| `long300` | B-S, C-S, seeds 0–1 | E = 300 instead of 100 |
+| `sizes` | B and C at XS (w=12) and M (w=34), seeds 0–1 | two more widths, same scaling rule |
+
+Each trains what is missing under `artifacts/extras/<study>/`, probes with the frozen SVMs
+and writes `report/extras/<study>.csv` (probe rows) and `report/extras/<study>_curves.csv`
+(per-epoch loss and validation k-NN, with the matching main runs as the 100-epoch reference).
 
 ## Storage layout
 
