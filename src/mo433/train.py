@@ -243,6 +243,8 @@ def _objective_for(s: RunSettings) -> Objective:
             register_objective("B", lambda st: VICRegObjective(st.head_width))
         elif s.row == "C":
             import mo433.train_c  # noqa: F401  (registers "C" on import)
+        elif s.row == "J":
+            import mo433.train_j  # noqa: F401  (registers "J" on import; extras only)
     return _OBJECTIVES[s.row](s)
 
 
