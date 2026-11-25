@@ -581,7 +581,9 @@ Sec.~4.2 second dataset; caveat on the B objective).}
 %   seeds 0-1, E = 100, both datasets. So J vs. B changes ONLY the objective.
 % - Results EuroSAT: J is BELOW VICReg at every label fraction (\ExtGapEurosatJMinusBTen{} pp
 %   at 10%), and C beats J by \ExtGapEurosatCMinusJTen{} pp.
-% - Results STL-10: \todo{fill when the STL-10 J runs finish} (\ExtGapStlJMinusBTen{}).
+% - Results STL-10: J is slightly BELOW VICReg too (\ExtGapStlJMinusBTen{} pp at 10% labels,
+%   \ExtGapStlJMinusBHundred{} at 100%, \ExtGapStlJMinusBOne{} at 1% = within spread), and C beats J
+%   by \ExtGapStlCMinusJTen{} pp. Same picture on both datasets: J <= B < C.
 % - Caveats to state: optimizer/weight decay were tuned for VICReg (LeJEPA's reference
 %   recipe uses wd 5e-4 for ResNets vs. our 0.11) and only 2 views (the paper uses 2 global
 %   + 6 local crops), 2 seeds, short budget -> this is "LeJEPA under our frozen protocol",
