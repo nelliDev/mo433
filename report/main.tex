@@ -64,51 +64,50 @@ on a laptop GPU) and should be read as undertrained.
 \section{Introduction}
 \label{sec:intro}
 
-Self-supervised pretraining produces strong but large encoders, while many applications need
-a small convnet. Two routes lead there: train the small network directly with a
-self-supervised objective, or distil a large, already-pretrained self-supervised teacher
-into it. The second route needs no labels either, but it relies on a teacher whose
-pretraining cost exceeds the student's budget by orders of magnitude. Which route is better
-is not a fixed answer: the course brief hypothesizes that distillation wins for small
-students and small data or compute budgets, and that direct training catches up as the
-student, the data and the epochs grow.
+Self-supervised learning has gained popularity in the last couple of years due to its strong results and comparitavely less need for labeled data. The whole training process, however, is prohibitively expensive for many users. Even fine-tuning pre-trained models is still very expensive and the architectures produced usually surpass the application's compute budget. When we need a small lightweight model with self-supervised performance level, distillation can be a viable option. The alternative is training a lightweight model, such as a convnet, from scratch with a self-supervised obective. This project compares these two approaches and gives insight on what matters for a good lightweight model.
 
-We measure the distillation-minus-direct gap (\CB) in a controlled setting: one frozen
-teacher (DINO ViT-S/16~\citep{caron2021dino}), one direct method
-(VICReg~\citep{bardes2022vicreg}), one student family designed for 96-pixel inputs at two
-widths, and two amounts of unlabeled STL-10 data~\citep{coates2011stl10}. B and C share
-architecture, initialization, views, optimizer, epochs, steps and batch size; the teacher's
-costs are recorded separately so that the comparison can also be made per GPU-hour. A
-difference counts only if it exceeds the seed-to-seed spread. Two reference rows complete
-the design: the student at random initialization (A), which separates ``distillation
-helped'' from ``any training helped'', and the teacher itself (D), which shows how much of
-the teacher survives compression.
+We compare the distillation versus direct training in a controlled setting: one frozen teacher (DINO ViT-S/16~\citep{caron2021dino}), a direct method (VICReg~\citep{bardes2022vicreg}) , one student family designed for 96-pixel inputs at two widths, and two amounts of unlabeled STL-10 data~\citep{coates2011stl10}. The final comparison table compares 4 models: the student architecture with no training, trained from-scratch with VICReg, distilled from the teacher model, and the teacher itself. Additionally, we also trained the student architecture with the LeJEPA objective. 
+
+
+% Self-supervised pretraining produces strong but large encoders, while many applications need
+% a small convnet. Two routes lead there: train the small network directly with a
+% self-supervised objective, or distil a large, already-pretrained self-supervised teacher
+% into it. The second route needs no labels either, but it relies on a teacher whose
+% pretraining cost exceeds the student's budget by orders of magnitude. Which route is better
+% is not a fixed answer: the course brief hypothesizes that distillation wins for small
+% students and small data or compute budgets, and that direct training catches up as the
+% student, the data and the epochs grow.
+
+% We measure the distillation-minus-direct gap (\CB) in a controlled setting: one frozen
+% teacher (DINO ViT-S/16~\citep{caron2021dino}), one direct method
+% (VICReg~\citep{bardes2022vicreg}), one student family designed for 96-pixel inputs at two
+% widths, and two amounts of unlabeled STL-10 data~\citep{coates2011stl10}. B and C share
+% architecture, initialization, views, optimizer, epochs, steps and batch size; the teacher's
+% costs are recorded separately so that the comparison can also be made per GPU-hour. A
+% difference counts only if it exceeds the seed-to-seed spread. Two reference rows complete
+% the design: the student at random initialization (A), which separates ``distillation
+% helped'' from ``any training helped'', and the teacher itself (D), which shows how much of
+% the teacher survives compression.
 
 % =====================================================================================
 \section{Related work}
 \label{sec:related}
 
 \paragraph{Self-supervised representation learning.}
-Joint-embedding methods make the representations of two views of an image agree.
-SimCLR~\citep{chen2020simclr} uses in-batch negatives and needs large batches and long
-schedules; BYOL~\citep{grill2020byol} drops negatives and predicts a moving-average target
-network; DINO~\citep{caron2021dino} turns this into self-distillation without labels and
-yields ViT features that are strong $k$-NN classifiers; VICReg~\citep{bardes2022vicreg}
-prevents collapse explicitly with variance, invariance and covariance terms, without
-negatives or a momentum encoder. I-JEPA~\citep{assran2023ijepa} predicts the representations
-of masked target blocks, and MAE~\citep{he2022mae} reconstructs masked pixels and is
-strongest under fine-tuning rather than frozen probes. These works study large encoders and
+The most popular methods, called joint-embedding, optimize to align the representations of two views of an image.
+SimCLR~\citep{chen2020simclr} uses negative in-batch examples and needs large batches and long
+schedules. BYOL~\citep{grill2020byol} isn't reliant on negatives and predicts a moving-average target
+network with an assymetrical architecture; DINO~\citep{caron2021dino} turns this into self-distillation without labels and yields ViT features that are strong $k$-NN classifiers; VICReg~\citep{bardes2022vicreg} prevents collapse explicitly with variance, invariance and covariance terms, without negatives or a momentum encoder. I-JEPA~\citep{assran2023ijepa} predicts the representations of masked target blocks, and MAE~\citep{he2022mae} reconstructs masked pixels and is strongest under fine-tuning rather than frozen probes. These works study large encoders and
 do not ask how a \emph{small} convnet trained this way compares with one distilled from a
-large teacher at equal compute. We use DINO as the teacher and VICReg, the brief's suggested
-default for a modest GPU, as the direct method.
+large teacher at equal compute. We use DINO and Le-JEPA as the teacher and VICReg, the brief's suggested default for a modest GPU, as the direct method.
 
 \paragraph{Knowledge distillation and self-supervised distillation.}
 Classical distillation~\citep{hinton2015distilling} trains a student on a teacher's softened
 class probabilities; it is supervised, and the teacher's training cost is taken as given.
 SEED~\citep{fang2021seed}, CompRess~\citep{koohpayegani2020compress} and
-DisCo~\citep{gao2022disco} show that a self-supervised teacher can rescue small students for
+DisCo~\citep{gao2022disco} show that a self-supervised teacher can improve the performance of small students for
 which contrastive learning performs poorly: SEED, for example, lifts an EfficientNet-B0
-from 42.2\% to 67.6\% ImageNet linear accuracy over a MoCo-v2 baseline. All three distil
+from 42\% to 67\% ImageNet linear accuracy. All three distil
 convnet teachers into convnet students on ImageNet, compare against a direct-SSL baseline
 trained for the same student epochs, and do not charge the teacher's pretraining or forward
 cost to the student. DisCo's finding that the student's embedding dimension can bottleneck
@@ -147,65 +146,51 @@ and an accounting that includes the teacher's published pretraining cost.
 \subsection{Data, splits and seeds}
 \label{sec:data}
 
-We use STL-10~\citep{coates2011stl10}: 100k unlabeled, 5k labeled training and 8k test
-images at $96\times96$ pixels, 10 classes. All 100k unlabeled images are used for
-self-supervised training and distillation (the brief suggests a 10k--30k subset on a modest
-GPU; our throughput measurements, Section~\ref{sec:compute}, allowed the full split).
-They are stored in a seeded random order, and the \emph{ablation subset} is the first 50k
-images of that order, shared by B, C, both sizes and all seeds.
+We used the STL-10~\citep{coates2011stl10} dataset: 100k unlabeled, 5k labeled training and 8k test
+images at $96\times96$ pixels forming 10 classes. All 100k unlabeled images are used for
+self-supervised training and distillation.
+To ensure consistency, the images are stored in a seeded random order, and the ablation subset is the first 50 thousand images of that order. 
 
-The labeled training set has three uses, each with fixed, committed indices
-(\texttt{splits/}). (i)~A class-stratified 10\% \emph{validation split} (500 images) scores
-every tuning and selection choice, with the remaining 90\% as the $k$-NN neighbour bank.
-(ii)~Five stratified folds of the full labeled set select the SVM hyperparameters.
-(iii)~The reported probes are fitted on label fractions of 1\%, 10\%, 50\% and 100\% of the
-full labeled set, three stratified draws each, generated exactly as in the brief
-(\texttt{random\_state} = draw). The test split is used only for the reported numbers and
-informs no choice. Every encoder is probed on the same subsets.
+% The labeled training set has three uses: (i)~A 10\% validation split (500 images, split evenly across classes) scores every tuning and selection choice before actually training, with the remaining 90\% as the $k$-NN neighbour bank.
+% (ii)~Five stratified folds of the full labeled set select the SVM hyperparameters.
+% (iii)~The reported probes are fitted on label fractions of 1\%, 10\%, 50\% and 100\% of the
+% full labeled set, three stratified draws each, generated exactly as in the brief
+% (\texttt{random\_state} = draw). The test split is used only for the reported numbers and
+% informs no choice. Every encoder is probed on the same subsets.
 
-Seed $s$ initializes the student and seeds the sampler; row A with seed $s$ is exactly the
-initial network of B and C with seed $s$. The small student (S) uses seeds 0--2 and the
+Seed $s$ initializes the student and seeds the sampler. The untrained student with seed $s$ is exactly the
+initial network of the trained students with seed $s$. The small student (S) uses seeds 0--2 and the
 large one (L) seeds 0--1. Runs seed Python, NumPy, PyTorch and the sampler but are not
 bitwise deterministic (cuDNN kernels, bf16 autocast).
 
 \subsection{View pool and teacher cache}
 \label{sec:pool}
 
-B and C share a \emph{view pool} of $K=20$ augmented views per unlabeled image, generated
-once with lightly's \texttt{VICRegViewTransform} (96 px input, minimum crop scale 0.2,
-Gaussian blur probability 0.5 with $\sigma\in[0.1,1]$, other settings at their defaults)
-and stored as a uint8 memory map ($\approx$55~GB). A chunk-shuffled sampler permutes
-64-image chunks each epoch and draws view indices at random: two distinct views per image
-for B, one for C. Because the views are fixed, the teacher's feature for every (image, view)
-pair is computed once (2M $\times$ 384, fp16) and reused by every C run, seed, size and data
-fraction; its \GpuHTeacherCache~GPU-h are charged to C (Table~\ref{tab:budget}).
+The trained students share the k-NN parameter $K=20$ augmented views per unlabeled image, generated
+once and stored. A sampler permutes 64-image chunks each epoch and draws view indeces at random: two distinct views per image
+for the directly trained student, one for the distilled student. Because the views are fixed, the teacher's feature for every (image, view)
+pair is computed once and reused by every distilled student run, seed, size and data
+fraction. Its \GpuHTeacherCache~GPU-h are added to the distilled student's compute budget (Table~\ref{tab:budget}).
 
 \subsection{Encoders}
 \label{sec:encoders}
 
-\paragraph{Teacher (D).} \texttt{vit\_small\_patch16\_224.dino} from timm, identical to the
-official DINO ViT-S/16 800-epoch checkpoint, frozen in \texttt{eval()} mode
-(\ParamsD{}M parameters, \FeatDimD-d). Each 96-pixel image or view is resized bicubically to
-224 pixels without cropping and normalized with ImageNet statistics; the feature is the CLS
-token after the final LayerNorm (timm's pooled output), computed under fp16 autocast. The
-teacher passed the sanity check before any C run (validation $k$-NN \ValKnnD\%, embedding
-spread \SpreadD, $k$-means NMI \NmiValD; Table~\ref{tab:diagnostics}). The published
-reference of 74.5\% $k$-NN is an ImageNet number, so this check is qualitative: it rules
-out a broken checkpoint or pipeline, not a mismatch with the paper.
+\paragraph{Teacher.} We used \texttt{vit\_small\_patch16\_224.dino} from timm (identical to the official DINO ViT-S/16 800-epoch checkpoint), frozen in eval mode
+(\ParamsD{}M parameters, \FeatDimD-d). Each 96-pixel image or view is resized with bicubic interpolation to
+224 pixels without cropping and normalized with ImageNet statistics. The feature is the CLS
+token after the final Layer Normalization, computed with fp16 autocast. Before training the distilled student, the teacher passed a sanity check (validation $k$-NN \ValKnnD\%, embedding
+spread \SpreadD, $k$-means NMI \NmiValD; Table~\ref{tab:diagnostics}).
 
-\paragraph{Student family ``ResNet96'' (A, B, C).} A basic-residual network adapted to
-96-pixel inputs: a $3\times3$ stride-2 stem without max-pool, four stages of two basic
+\paragraph{Student family ``ResNet96''.} A basic residual network adapted to
+96-pixel inputs: a $3\times3$ stride-2 stem without max pooling, four stages of two basic
 blocks with widths $w$/$2w$/$4w$/$8w$ and feature maps $48\to24\to12\to6$, global average
-pooling, and no head. BatchNorm and ReLU throughout, Kaiming initialization, and only the
-seed differs between A, B and C. Sizes differ by width only: S ($w=24$, \ParamsS{}M
-parameters, \FeatDimS-d) and L ($w=48$, \ParamsL{}M, \FeatDimL-d); the teacher is
-$\approx$3.5$\times$ larger than L. We rejected depthwise/ConvNeXt-style blocks, which are
-weak under stock self-supervised recipes and were 3.1$\times$ slower in our benchmark, and a
-trained multi-scale fusion head, which could adapt differently under B and C and add a
-second architectural difference to the gap; multi-scale features are instead tested with an
-evaluation-only probe (Section~\ref{sec:multiscale}). Features are always extracted in
-\texttt{eval()} mode; for row A this means BatchNorm uses its default running statistics,
-so A's features do not depend on batch composition.
+pooling, and no head. BatchNorm and ReLU was used in all layers. The initialization used Kaiming, and only the
+seed differs between the different experiments. Sizes differ by width only: S ($w=24$, \ParamsS{}M
+parameters, \FeatDimS-d) and L ($w=48$, \ParamsL{}M, \FeatDimL-d). The teacher is still around 3.5$\times$ larger than the largest student. I considered, but rejected depthwise/ConvNeXt-style blocks, which are
+weak under stock self-supervised recipes according to the literature and were 3.1$\times$ slower in our benchmark. Similarly, a
+trained multi-scale fusion head was also rejected because it could adapt differently under different trained students (direct vs distilled) and add a
+second architectural difference to the performance gap. Multi-scale features are instead tested with an evaluation-only probe (Section~\ref{sec:multiscale}). Features are always extracted in eval mode; for the untrained student this means BatchNorm uses its default running statistics,
+so its features do not depend on batch composition.
 
 \subsection{Training rows B and C}
 \label{sec:training}
@@ -647,26 +632,9 @@ Sec.~4.2 second dataset; caveat on the B objective).}
 \section{Difficulties and solutions}
 \label{sec:difficulties}
 
-\todo{write: difficulties met during the project and the solutions adopted (course format).}
-% Candidates from the repository history: 6 GB GPU -> fixed view pool + cached fp16 teacher
-% features (Sec. method); host RAM / systemd-oomd kills of parallel probe workers ->
-% MO433_N_JOBS cap and jobs in capped systemd units; a corrupted CUDA timing event in
-% B-L-050-s0 (epoch 85) -> per-epoch GPU time capped at wall time (issue #27); compressed
-% 4-week calendar -> ablation scheduled last, configs frozen before the 20 runs.
-% More candidates (pick the strongest):
-% - Data loading was the bottleneck -> precomputed view pool (K=20), pread + chunk shuffle;
-%   fixed-view control: on-the-fly only -0.2 pp val k-NN, kept the pool.
-% - Teacher cost -> features cached once per view, spot-checked against a live forward.
-% - Fair tuning on a budget -> one Optuna study (median pruning) on B only, winner frozen for
-%   all rows; LARS check 70.8% vs 72.6% kept AdamW.
-% - Avoiding test-set tuning -> SVM C/gamma by 5-fold CV on B-S-100-s0, configs frozen first.
-% - Collapse detection -> spread / val k-NN / NMI checks vs. random init during training.
-% - Two jobs could not share the 6 GB GPU (OOM when the EuroSAT smoke test overlapped the
-%   E=300 run) -> one queue of jobs, resume from checkpoint.
-% - EuroSAT: no test split, 64 px, RBF SVM >15 min on 21.6k -> 80/20 stratified split,
-%   upsample to 96 px, 5k labeled subset. torchvision's STL-10 loader MD5-checks files ->
-%   own binary reader, pixel-identical test.
-% - LeJEPA: bf16 autocast rounded the SIGReg statistic to integers -> computed in fp32.
+The main practical constraint was the hardware. All training ran on a single 6 GB laptop GPU, which could not hold two training jobs at once, and the laptop's system memory was also limited. Its out-of-memory killer terminated the work session twice. We therefore ran every job sequentially as a memory-capped background service, with checkpoints so any run could resume after an interruption. Throughput was the second difficulty. Generating augmented views on the fly made data loading the bottleneck, so we precomputed a pool of K = 20 augmented views per image and read them in shuffled chunks. A control run showed that on-the-fly augmentation was only 0.2 points better in validation k-NN, so we kept the pool. For row C, running the ViT-S/16 teacher at every step would have dominated the cost. Instead we cached its features once per pool view and checked the cache against live teacher outputs. Fairness under a limited tuning budget was a methodological difficulty. We ran a single Optuna study, with median pruning of bad trials, on row B only and froze its winner for every row, so the comparison does not favour distillation; a LARS check (70.8\% vs. 72.6\%) confirmed AdamW. To avoid tuning on the test set, the SVM hyperparameters were chosen by 5-fold cross-validation on a single run, and all configurations were frozen (tag configs-frozen) before any final result was computed. We also tracked collapse diagnostics during training (embedding spread, validation k-NN and NMI) to detect failed VICReg runs, and we capped the measured GPU time of each epoch at its wall time so the reported costs could not be inflated.
+
+The second dataset brought its own problems. EuroSAT has no official test split and its images are 64×64. We built a stratified 80/20 split and upsampled the images to 96×96, so the students and augmentations stayed unchanged. Fitting the RBF SVM on all 21.6k training images took more than 15 minutes per encoder. We therefore probed on a stratified 5,000-image labeled subset, which also mirrors STL-10's 5k labeled set and keeps the label fractions comparable between the two datasets.
 
 \section{Use of generative AI tools}
 \label{sec:genai}
