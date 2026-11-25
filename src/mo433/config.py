@@ -80,7 +80,7 @@ def run_id(row: str, size: str, frac: int, seed: int) -> str:
 
 
 _ENCODER_ID_PATTERNS = (
-    re.compile(r"(?P<row>[BCJ])-(?P<size>[SL])-(?P<frac>\d{3})-s(?P<seed>\d+)"),
+    re.compile(r"(?P<row>[BCJ])-(?P<size>XS|S|M|L)-(?P<frac>\d{3})-s(?P<seed>\d+)"),
     re.compile(r"(?P<row>A)-(?P<size>[SL])-s(?P<seed>\d+)"),
     re.compile(r"(?P<row>D)"),
 )

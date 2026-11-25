@@ -16,6 +16,7 @@
 \usepackage[hidelinks]{hyperref}
 
 \input{generated/macros}
+\input{generated/extras_macros}
 
 % Unresolved points: grep for \todo before submission.
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
@@ -511,6 +512,136 @@ not change the \CB{} comparison.
 \input{generated/multiscale}
 
 % =====================================================================================
+\section{Extra experiments (after the freeze)}
+\label{sec:extras}
+
+% Everything in this section ran AFTER the 20 reported runs, with the frozen settings
+% (tag configs-frozen) plus one declared change each; reported apart from the main study.
+% Numbers below come from \Ext... macros (generated/extras_macros.tex, `mo433 report-extras`).
+\todo{write: short intro to the four extras and why each was run (brief Sec.~9 stretch goals;
+Sec.~4.2 second dataset; caveat on the B objective).}
+% - Brief Sec. 9 lists: second teacher, more student sizes, patch-token distillation, second
+%   (out-of-domain) dataset. We did: second dataset (EuroSAT), more sizes (XS, M), plus two
+%   that target our own open questions: E=300 (Q6) and LeJEPA as a second direct method
+%   (the "supervision source vs. objective" confound).
+% - All untuned: same optimizer, head width, batch, views as the frozen study.
+
+\subsection{Second dataset: EuroSAT}
+\label{sec:eurosat}
+
+\input{generated/extras_datasets}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/extras_label_efficiency}
+  \caption{Label efficiency of the S student on STL-10 (left) and EuroSAT (right), linear
+  SVM, mean $\pm$ sd over seeds. J (LeJEPA) is an extra experiment.}
+  \label{fig:extras-label-efficiency}
+\end{figure}
+
+\todo{write: EuroSAT setup and results; this answers the brief's Sec.~4.2 (non-ImageNet dataset).}
+% Setup (state explicitly, brief Sec. 4.2 asks which split is used for what):
+% - EuroSAT RGB \citep{helber2019eurosat}, 27k images, 64 px, 10 classes; NOT from ImageNet, so the
+%   teacher never saw it. Brief calls it "a domain where large pretrained models transfer poorly".
+% - No official test split -> stratified 80/20 split (seed 0): 21.6k train / 5.4k test.
+% - Unlabeled pool = all 21.6k train images, labels discarded. Labeled probe set = a
+%   stratified 5k subset of those same 21.6k (mirrors STL-10's 5k; RBF SVM on 21.6k took
+%   >15 min per encoder). Overlap of pool and probe images is standard (brief Sec. 4.2).
+% - Upsampled 64->96 px (bicubic) so students, augmentations and view pool are unchanged
+%   (brief Sec. 4.3, first option). Teacher still sees 224 px.
+% - Same pipeline and frozen settings; only n_images = 21,600 differs. Full study: A, B, C, D,
+%   both sizes, both data fractions; tables in report/eurosat/generated (macros \Eurosat...).
+% - Teacher sanity check passed: val k-NN 92.6%, NMI 0.77.
+% Results (S, linear SVM; L behaves the same, see report/eurosat/generated/main_probes.tex):
+% - Gap C-B collapses from ~15 pp on STL-10 to \ExtGapEurosatCMinusBTen{} pp at 10% labels,
+%   \ExtGapEurosatCMinusBHundred{} at 100%, and is inconclusive at 1%
+%   (\ExtGapEurosatCMinusBOne{}, within the spread).
+% - The teacher D is no longer a ceiling: at 1% labels D (\ExtAccEurosatDOne{}%) is BELOW B
+%   and C; at 100% C (\ExtAccEurosatCHundred{}) matches D (\ExtAccEurosatDHundred{}).
+%   Compare STL-10 where D is far above everyone (\ExtAccStlDTen{} at 10%).
+% - Interpretation hooks: (i) part of the STL-10 gap is plausibly the ImageNet overlap
+%   (teacher saw those images) -> confirms the bias the brief warns about; (ii) in-domain
+%   self-supervised training (B) is much more competitive out of domain; (iii) distillation
+%   still wins at >=10% labels even though the teacher is out of domain - the student
+%   adapts to EuroSAT through the views it trains on.
+% - Caveat: EuroSAT is an easier task (A = random init already gets ~56% at 100% labels vs
+%   35% on STL-10), so ceilings compress all gaps.
+
+\subsection{A second direct method: LeJEPA}
+\label{sec:lejepa}
+
+\todo{write: LeJEPA as row J; does the gap belong to VICReg or to direct training?}
+% - Brief, "Caveat on the comparison": C vs. B differs in supervision source AND objective;
+%   asks to "discuss how a stronger or weaker B objective would move the gap". Row J tests it.
+% - LeJEPA \citep{balestriero2025lejepa}: SIGReg (random 1-D projections pushed to N(0,1) by
+%   the Epps-Pulley test) + prediction of each view's embedding from the mean of the views;
+%   one hyperparameter lambda, claimed to need no heuristics (no EMA, no stop-grad).
+% - Setup: reference defaults untuned (lambda = 0.05, 256 slices, projector MLP 2048-2048-128),
+%   same 2 pool views per image as B, frozen optimizer (tuned for VICReg!), S student,
+%   seeds 0-1, E = 100, both datasets. So J vs. B changes ONLY the objective.
+% - Results EuroSAT: J is BELOW VICReg at every label fraction (\ExtGapEurosatJMinusBTen{} pp
+%   at 10%), and C beats J by \ExtGapEurosatCMinusJTen{} pp.
+% - Results STL-10: \todo{fill when the STL-10 J runs finish} (\ExtGapStlJMinusBTen{}).
+% - Caveats to state: optimizer/weight decay were tuned for VICReg (LeJEPA's reference
+%   recipe uses wd 5e-4 for ResNets vs. our 0.11) and only 2 views (the paper uses 2 global
+%   + 6 local crops), 2 seeds, short budget -> this is "LeJEPA under our frozen protocol",
+%   not LeJEPA at its best. Conclusion hook: swapping the direct objective did not close
+%   the gap; within this budget the gap is not a VICReg artefact.
+
+\subsection{Longer training ($E=300$)}
+\label{sec:long300}
+
+\input{generated/extras_long300}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.55\linewidth]{figures/extras_long300_curves}
+  \caption{Validation $k$-NN during training, S student, STL-10, mean of seeds 0--1:
+  frozen budget ($E=100$, dashed) vs.\ $E=300$ (solid).}
+  \label{fig:extras-long300-curves}
+\end{figure}
+
+\todo{write: what tripling the epochs does; turns Q6 from an argument into a measurement.}
+% - Change: E = 300 instead of 100 (cosine schedule stretched over 300 epochs), S, B and C,
+%   seeds 0-1; compared against the main runs with the same seeds.
+% - B gains more than C: at 10% labels B \ExtAccLongBEHundredTen{} -> \ExtAccLongBEThreeHundredTen{},
+%   C \ExtAccLongCEHundredTen{} -> \ExtAccLongCEThreeHundredTen{}.
+% - Gap shrinks but stays large: \ExtGapLongEHundredTen{} -> \ExtGapLongEThreeHundredTen{} pp
+%   (10% labels), \ExtGapLongEHundredHundred{} -> \ExtGapLongEThreeHundredHundred{} pp (100%).
+% - So the brief's hypothesis direction holds (B catches up with budget) but slowly: ~1.4 pp
+%   of gap per extra 200 epochs at 10% labels -> no crossover in any realistic budget here.
+% - Curves: B is still rising at epoch 300, C has plateaued since ~150 -> B undertrained
+%   even at 3x. Note curves at E=100 vs E=300 are not the same schedule (cosine), so
+%   compare end points, not epoch-by-epoch.
+% - Cost: B-S at 300 epochs ~3.8 GPU-h per run.
+
+\subsection{More student sizes}
+\label{sec:sizes}
+
+\input{generated/extras_sizes}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/extras_sizes}
+  \caption{Four student sizes on STL-10 (XS and M are extra experiments). Left: linear-SVM
+  accuracy at 10\% labels against parameters. Right: gap C$-$B against parameters for three
+  label fractions; error bars are the larger of the two seed sds.}
+  \label{fig:extras-sizes}
+\end{figure}
+
+\todo{write: four-size gap vs. parameters (brief Sec.~9: accuracy against parameter count; Q5).}
+% - XS (w=12, \ExtParamsXS{}M) and M (w=34, \ExtParamsM{}M) by the same single width rule as
+%   S/L; B and C, seeds 0-1, 100% data, E = 100.
+% - 16x parameter range: the gap at 10% labels is flat at ~14.5-15 pp
+%   (XS \ExtGapSizeXSTen{}, S \ExtGapSizeSTen{}, M \ExtGapSizeMTen{}, L \ExtGapSizeLTen{}).
+%   At 100% labels it narrows slightly from XS to M and then stays flat (\ExtGapSizeXSHundred{} -> \ExtGapSizeLHundred{}).
+% - Both rows gain about equally from size (left panel: parallel lines) -> no sign of B
+%   overtaking C; the crossover predicted by the brief is not within 0.4-6.3M params.
+% - Even the XS student distilled (\ExtAccSizeCXSTen{}) beats the L student trained with
+%   VICReg (\ExtAccSizeBLTen{}) at 10% labels: 16x fewer parameters.
+% - Teacher stays clearly larger than the largest variant (21.7M vs 6.3M).
+
+% =====================================================================================
 \section{Difficulties and solutions}
 \label{sec:difficulties}
 
@@ -520,6 +651,20 @@ not change the \CB{} comparison.
 % MO433_N_JOBS cap and jobs in capped systemd units; a corrupted CUDA timing event in
 % B-L-050-s0 (epoch 85) -> per-epoch GPU time capped at wall time (issue #27); compressed
 % 4-week calendar -> ablation scheduled last, configs frozen before the 20 runs.
+% More candidates (pick the strongest):
+% - Data loading was the bottleneck -> precomputed view pool (K=20), pread + chunk shuffle;
+%   fixed-view control: on-the-fly only -0.2 pp val k-NN, kept the pool.
+% - Teacher cost -> features cached once per view, spot-checked against a live forward.
+% - Fair tuning on a budget -> one Optuna study (median pruning) on B only, winner frozen for
+%   all rows; LARS check 70.8% vs 72.6% kept AdamW.
+% - Avoiding test-set tuning -> SVM C/gamma by 5-fold CV on B-S-100-s0, configs frozen first.
+% - Collapse detection -> spread / val k-NN / NMI checks vs. random init during training.
+% - Two jobs could not share the 6 GB GPU (OOM when the EuroSAT smoke test overlapped the
+%   E=300 run) -> one queue of jobs, resume from checkpoint.
+% - EuroSAT: no test split, 64 px, RBF SVM >15 min on 21.6k -> 80/20 stratified split,
+%   upsample to 96 px, 5k labeled subset. torchvision's STL-10 loader MD5-checks files ->
+%   own binary reader, pixel-identical test.
+% - LeJEPA: bf16 autocast rounded the SIGReg statistic to integers -> computed in fp32.
 
 \section{Use of generative AI tools}
 \label{sec:genai}
@@ -527,6 +672,15 @@ not change the \CB{} comparison.
 \todo{required by the course: state which code parts or steps used generative AI tools.
 The course allows AI for code (documented here) but forbids it for writing the report,
 except for revising the text.}
+% Points to cover (be specific and honest):
+% - Which code: e.g. the mo433 package (pipeline, training loops, probes, report generator,
+%   extras, tests) was written with an AI coding assistant (Claude Code) under your
+%   direction; you designed/decided X, reviewed Y, verified by tests and sanity checks.
+% - Which decisions were yours (design, protocol, what to run) vs. implemented by the tool.
+% - How correctness was checked: unit tests (~200), teacher sanity check, collapse checks,
+%   comparing against reference implementations (lightly VICReg loss, torchvision loader).
+% - Text: say whether AI was used only to revise your text, and for which sections
+%   (e.g. if an AI draft was used as a starting point and then rewritten, say so).
 
 % =====================================================================================
 \section{Discussion}
@@ -544,7 +698,10 @@ seeds 0--1) to \ValKnnBSFull\% (seeds 0--2), while C's rises only from 89.7\%
 (\texttt{tuning/grid\_C.json}) to \ValKnnCSFull\%; and halving the budget costs B about three
 times as much accuracy as C (Section~\ref{sec:ablation}). Both point the same way: with
 longer training or more data, B would likely gain more than C, and the gap would shrink.
-Whether it would close cannot be inferred from these runs. The size of the gap, especially
+Whether it would close cannot be inferred from these runs.
+\todo{update: the $E=300$ extra (Section~\ref{sec:long300}) now measures this.}
+% - B gains ~2.6 pp, C ~1.3 pp at 10% labels; gap \ExtGapLongEHundredTen{} -> \ExtGapLongEThreeHundredTen{}.
+% - So "B would gain more" is confirmed; "whether it closes": not at 3x budget. The size of the gap, especially
 at 100\% labels, should be interpreted with this, and with the teacher's exposure to
 ImageNet (below), in mind.
 
@@ -557,10 +714,15 @@ ImageNet (below), in mind.
     distillation of a DINO-trained teacher vs.\ VICReg), so the gap cannot be attributed to
     distillation alone. A DINO-trained convnet in B would remove the second difference; we
     did not run it because DINO is costlier and more collapse-prone at small budgets.
+    \todo{add: LeJEPA (row J, Section~\ref{sec:lejepa}) as a second direct objective.}
+    % J vs. B changes only the objective; J did not beat VICReg -> the gap is not specific
+    % to VICReg (within this frozen protocol). It still differs from C in supervision source.
   \item \textbf{ImageNet overlap.} STL-10 images come from ImageNet, which the teacher saw
     (without labels) during pretraining. This favours C and D and may explain part of the
     teacher's \AccDLinHundred\% and of C's margin; we discuss it but did not run a second,
-    non-ImageNet dataset.
+    non-ImageNet dataset. \todo{WRONG NOW: EuroSAT was run (Section~\ref{sec:eurosat}); rewrite.}
+    % On EuroSAT (never seen by the teacher) the gap drops to ~2.5 pp and D stops being a
+    % ceiling -> evidence that the overlap inflates C and D on STL-10.
   \item \textbf{Optimizer tuned on B.} The optimizer was tuned on B and copied to C, which
     biases the comparison toward B; a C win is therefore conservative in this respect.
   \item \textbf{Fixed views.} B and C train on the same 20 views per image; the cost of this
@@ -598,6 +760,8 @@ not bitwise deterministic.
 
 \paragraph{Scope.} One dataset, one teacher, one direct method, two student sizes and two
 data settings. The absence of a crossover holds only within this range.
+\todo{update scope: extras add a second dataset, a second direct method (J), four sizes and $E=300$.}
+% Still one teacher; extras have 2 seeds; J untuned under a VICReg-tuned optimizer.
 
 \subsection{Departures from the brief and the plan}
 \label{sec:departures}
@@ -618,6 +782,9 @@ data settings. The absence of a crossover holds only within this range.
     selection sees only B-S-100-s0's training features; those rows were nevertheless deleted
     and regenerated after the selection, with identical results.
 \end{enumerate}
+% \todo-candidate: add a departure item for the extras: run after the freeze, reported apart;
+% EuroSAT has no official test split (own stratified 80/20) and is probed on a 5k labeled
+% subset of the training split; LeJEPA uses 2 views, not the paper's multi-crop.
 All 20 runs used the training configuration later tagged \texttt{configs-frozen}; it did
 not change between the runs and the tag (only the SVM settings were filled in afterwards,
 as planned).
@@ -637,6 +804,11 @@ charged, direct training is about three orders of magnitude more efficient per G
 with a public checkpoint treated as free, distillation gives more accuracy per GPU-hour in
 three of four settings. These conclusions hold for VICReg as the direct method, on an
 ImageNet-derived dataset, and at a budget at which B is likely undertrained.
+\todo{update the conclusion with the extras.}
+% - Out of domain (EuroSAT) the advantage shrinks to ~2.5 pp and vanishes at 1% labels.
+% - LeJEPA does not do better than VICReg -> not an artefact of the direct method chosen.
+% - 3x epochs shrink the gap by only ~1.4 pp; four sizes (0.4-6.3M) keep it flat.
+% - So: the crossover, if any, lies outside our range on STL-10, and much closer out of domain.
 
 \paragraph{Reproducibility.} The repository regenerates every table and figure from the
 frozen configurations with \texttt{uv run mo433 all}; the 20 final checkpoints are
@@ -647,10 +819,17 @@ published as a release. \todo{link the repository and the checkpoint release}
 
 \todo{write: suggestions for improving the study (course format requires them on the final
 page).}
-% Candidates already argued in the text: a DINO-trained convnet as row B (removes the
-% objective confound, Sec. confounds); a non-ImageNet dataset (teacher overlap); longer
-% training / more epochs (Sec. q6); a wider LR / LARS search (Sec. limitations); a third
-% seed for L; on-the-fly augmentation for B beyond the single matched pair.
+% Candidates (updated after the extras; EuroSAT, E=300 and more sizes are now DONE):
+% - A DINO-trained convnet as row B (removes the objective confound entirely).
+% - Tune J (LeJEPA) / B per method with equal budget (e.g. wd, multi-crop) instead of
+%   reusing the VICReg optimizer; LeJEPA with its 2 global + 6 local crops.
+% - A second teacher from the other family (MAE ViT-B; brief Sec. 9), and a teacher
+%   pretrained in-domain (e.g. on satellite imagery) for EuroSAT.
+% - Distil patch tokens / intermediate feature maps (brief Sec. 9).
+% - Longer training beyond 300 epochs and on EuroSAT too, to locate a crossover.
+% - Supervised ImageNet-pretrained student as a reference row (brief Sec. 5, optional).
+% - More seeds (L and extras have 2); on-the-fly augmentation for B beyond the one pair.
+% - A wider LR / LARS search (Sec. limitations).
 
 % =====================================================================================
 {\small
