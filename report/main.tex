@@ -299,41 +299,22 @@ accuracy unless stated otherwise.
 \subsection{Q1: Does distillation beat direct training?}
 \label{sec:q1}
 
-Yes. Every experiment run concluded so. 
-(Table~\ref{tab:main-probes}, Figure~\ref{fig:curves} left). With 100\% unlabeled data the
-small students differ by \GapSFullLinOne~pp at 1\% labels (C \AccCSFullLinOne\% vs.\ VICReg
-\AccBSFullLinOne\%, linear SVM) and by \GapSFullLinHundred~pp at 100\% labels (\AccCSFullLinHundred\%
-vs.\ \AccBSFullLinHundred\%). The large students differ by \GapLFullLinOne{} and
-\GapLFullLinHundred~pp. The reference spreads are at most \GapSdSFullKnnOne~pp, so every gap
-is beyond spread by more than an order of magnitude; this also holds for the two L seeds
-individually (Table~\ref{tab:l-runs}). The answer never changes with the label fraction:
-for the SVM probes the gap is largest at low label fractions and narrows with more labels,
-but even at 100\% labels it stays above 10~pp. The brief anticipated that all rows would land within
-a few points of each other at 100\% labels; here they do not. Both trained rows are far
-above row A (\AccASLinHundred\% for S at 100\% labels), so B is a genuine, non-collapsed
-baseline and C's advantage is not merely ``any training helps''.
+Yes. Almost every experiment run concluded so, how much is a better question. On STL-10 it is a very clear win for the distilled student. This is expected since STL-10 is based on ImageNet, which the teacher is based on. On EuroSAT, however, the gap is much narrower, and in one experiment the direct training ties or wins compared to distillation. This may indicate that an even more out-of-domain dataset could flip the results. The gap also narrows for the linear SVM classifier with more labeled data. On this budget, the direct trained student also seems to be undertrained, indicating that more training could also narrow the gap. 
 
 \subsection{Q2: How much of the teacher survives compression?}
 \label{sec:q2}
 
 \input{generated/costs}
 
-With all labels, the large distilled student reaches \AccCLFullLinHundred\% linear-SVM
-accuracy against the teacher's \AccDLinHundred\%, and the small one \AccCSFullLinHundred\%.
-The loss is concentrated at low label fractions: at 1\% labels C-L reaches
-\AccCLFullLinOne\% and C-S \AccCSFullLinOne\% against \AccDLinOne\% for D, i.e.\ the
-students' features need more labels to be separated as well as the teacher's. The teacher
-has 13.8$\times$ the parameters of S and 3.5$\times$ those of L, 24$\times$ and 6$\times$ the
-MACs, and is 19$\times$ and 7$\times$ slower on the GPU (12$\times$ and 6$\times$ on the CPU;
-Table~\ref{tab:costs}). Part of this cost gap comes from input resolution: the teacher runs
-at 224 pixels, the students at their native 96. The feature dimensions differ (192 for S,
-384 for L and D), and probe capacity grows with dimension, so S-vs-L comparisons carry
-this caveat.
+Mostly. With all labels, the large distilled student reaches \AccCLFullLinHundred\% linear-SVM
+accuracy against the teacher's \AccDLinHundred\%, and the small one \AccCSFullLinHundred\%. With fewer labels, however, less of the teacher survives. This indicates that the student can inherit some linearly decodable information, but can't grasp the desired class seperability needed with a handfew of examples. ARI and NMI numbers support this. In other domains, such as the EuroSAT images, we may not want the teacher to survive. The student ties with or beats the teacher on a few occasions, adapting to the domain while the teacher stayed frozen. The teacher only seems to be the ceiling inside its domain. 
 
 \subsection{Q3: Was the detour worth it?}
 \label{sec:q3}
 
 \input{generated/budget}
+
+It depends on how you count it, especially whether we consider pre-traiing budget into the equation. Because the distilled student uses only 1 versus 2 seperate views like the VICReg, the distilled trains faster and performs better than its competition. 
 
 Under matched student budgets, a C run is also cheaper than a B run: one view per sample
 instead of two makes a C epoch cost roughly 40\% of a B epoch (Table~\ref{tab:budget}). The
@@ -375,20 +356,22 @@ cache's cost; it is negligible next to the pretraining estimate either way.
   \label{fig:tsne}
 \end{figure}
 
-Mostly yes (Table~\ref{tab:diagnostics}). Validation $k$-NN, validation and test $k$-means
-NMI, and test ARI all order the encoders A $<$ B $<$ C $<$ D at both sizes and both data
-amounts, matching the probes; e.g.\ test NMI is \NmiTestBSFull{} for B-S and \NmiTestCSFull{}
-for C-S at 100\% data, against \NmiTestD{} for D. The t-SNE panel
-(Figure~\ref{fig:tsne}) shows the same progression: no class structure for A, partly
-separated clusters for B, and compact, mostly separated clusters for C and D.
+Mostly yes. The ordering is preserved (Untrained < VICReg < Distilled < Teacher on all metrics in STL-10), but the spread is different. Since VICReg's variance term pushes each dimension's standard deviation up, compred to a single view matching with teacher in the distilled student, it is expected that the directly trained student presents higher spread. As we mentioned previously, the out-of-domain order changes, and VICReg takes the lead.
 
-The spread statistic disagrees, and for a known reason. B's spread (\SpreadBSHalf{}--\SpreadBLFull)
-is higher than C's (\SpreadCSFull{}--\SpreadCLHalf) although C is better on every probe.
-VICReg's variance term directly pushes the per-dimension standard deviation up, whereas
-C's objective is only to match the teacher's direction after a projector; spread measures
-how evenly the dimensions are used, not whether classes are separated. It is useful as a
-collapse alarm (all trained encoders clear the 0.3 threshold, row A does not), not as a
-quality score.
+% Mostly yes (Table~\ref{tab:diagnostics}). Validation $k$-NN, validation and test $k$-means
+% NMI, and test ARI all order the encoders A $<$ B $<$ C $<$ D at both sizes and both data
+% amounts, matching the probes; e.g.\ test NMI is \NmiTestBSFull{} for B-S and \NmiTestCSFull{}
+% for C-S at 100\% data, against \NmiTestD{} for D. The t-SNE panel
+% (Figure~\ref{fig:tsne}) shows the same progression: no class structure for A, partly
+% separated clusters for B, and compact, mostly separated clusters for C and D.
+
+% The spread statistic disagrees, and for a known reason. B's spread (\SpreadBSHalf{}--\SpreadBLFull)
+% is higher than C's (\SpreadCSFull{}--\SpreadCLHalf) although C is better on every probe.
+% VICReg's variance term directly pushes the per-dimension standard deviation up, whereas
+% C's objective is only to match the teacher's direction after a projector; spread measures
+% how evenly the dimensions are used, not whether classes are separated. It is useful as a
+% collapse alarm (all trained encoders clear the 0.3 threshold, row A does not), not as a
+% quality score.
 
 The brief asks what changes when two encoders score the same on the SVM but differ in NMI.
 The clearest instance here is across seeds of C: the linear-SVM standard deviation of C-L
@@ -404,17 +387,21 @@ equal SVM accuracy, B-S with 100\% data and B-L with 50\% data at \AccBSFullLinH
 \subsection{Q5: Does the gap change with student size?}
 \label{sec:q5}
 
-Only slightly, and B never overtakes C (Figure~\ref{fig:curves} right). With 100\% data, the
-gap shrinks from S to L at every label fraction and probe, e.g.\ for the linear SVM from
-\GapSFullLinOne{} to \GapLFullLinOne~pp at 1\% labels (the largest reduction) and from
-\GapSFullLinHundred{} to \GapLFullLinHundred~pp at 100\% labels. These reductions of
-0.3--1.6~pp are small next to gaps of 10--17~pp, rest on two sizes and on two seeds for L,
-and range from less than one to about four reference standard deviations, so they indicate
-a direction, not a rate. With
-50\% data the direction reverses at low label fractions: the linear-SVM gap at 1\% labels
-grows from \GapSHalfLinOne{} to \GapLHalfLinOne~pp. Extrapolating a crossover from two
-points would not be justified; within the tested range (1.57M--6.28M parameters, up to 100k
-images, 100 epochs) there is none.
+Only slightly. As the table shows, the error measured in pp is pretty much flat, but in error ratio, the distilled model has a pretty significant change in performance. The hypothesis that states that a directly trained student would eventually beat a distilled one as size and data quantity increase sesm to fail, at leas at this scale. Then again, the VICReg student seems to be undertrained.
+
+That being said, we only tested increasing the width of the network, not detph. Perhaps a deeper network would give better results.
+
+% Only slightly, and B never overtakes C (Figure~\ref{fig:curves} right). With 100\% data, the
+% gap shrinks from S to L at every label fraction and probe, e.g.\ for the linear SVM from
+% \GapSFullLinOne{} to \GapLFullLinOne~pp at 1\% labels (the largest reduction) and from
+% \GapSFullLinHundred{} to \GapLFullLinHundred~pp at 100\% labels. These reductions of
+% 0.3--1.6~pp are small next to gaps of 10--17~pp, rest on two sizes and on two seeds for L,
+% and range from less than one to about four reference standard deviations, so they indicate
+% a direction, not a rate. With
+% 50\% data the direction reverses at low label fractions: the linear-SVM gap at 1\% labels
+% grows from \GapSHalfLinOne{} to \GapLHalfLinOne~pp. Extrapolating a crossover from two
+% points would not be justified; within the tested range (1.57M--6.28M parameters, up to 100k
+% images, 100 epochs) there is none.
 
 \subsection{Ablation: unlabeled data and steps}
 \label{sec:ablation}
@@ -602,7 +589,7 @@ Sec.~4.2 second dataset; caveat on the B objective).}
 \section{Difficulties and solutions}
 \label{sec:difficulties}
 
-The main practical constraint was the hardware. All training ran on a single 6 GB laptop GPU, which could not hold two training jobs at once, and the laptop's system memory was also limited. Its out-of-memory killer terminated the work session twice. We therefore ran every job sequentially as a memory-capped background service, with checkpoints so any run could resume after an interruption. Throughput was the second difficulty. Generating augmented views on the fly made data loading the bottleneck, so we precomputed a pool of K = 20 augmented views per image and read them in shuffled chunks. A control run showed that on-the-fly augmentation was only 0.2 points better in validation k-NN, so we kept the pool. For row C, running the ViT-S/16 teacher at every step would have dominated the cost. Instead we cached its features once per pool view and checked the cache against live teacher outputs. Fairness under a limited tuning budget was a methodological difficulty. We ran a single Optuna study, with median pruning of bad trials, on row B only and froze its winner for every row, so the comparison does not favour distillation; a LARS check (70.8\% vs. 72.6\%) confirmed AdamW. To avoid tuning on the test set, the SVM hyperparameters were chosen by 5-fold cross-validation on a single run, and all configurations were frozen (tag configs-frozen) before any final result was computed. We also tracked collapse diagnostics during training (embedding spread, validation k-NN and NMI) to detect failed VICReg runs, and we capped the measured GPU time of each epoch at its wall time so the reported costs could not be inflated.
+The main practical constraint was the hardware. All training ran on a single 6 GB laptop GPU, which could not hold two training jobs at once, and the laptop's system memory was also limited. Its out-of-memory killer terminated the work session twice. We therefore ran every job sequentially as a memory-capped background service, with checkpoints so any run could resume after an interruption. Throughput was the second difficulty. Generating augmented views on the fly made data loading the bottleneck, so we had to precompute a pool of 20 augmented views per image and read them in shuffled chunks. A control run showed that on-the-fly augmentation was only barely better in validation k-NN, so we kept the pool. For the distilled student, running the ViT-S/16 teacher at every step would have exploded the cost. Instead we cached its features once per pool view and checked the cache against live teacher outputs. Fairness under a limited tuning budget was a methodological difficulty. We ran a single Optuna study, with median pruning of bad trials, on VICReg only and froze its winner for every other student, so the comparison does not favour distillation.
 
 The second dataset brought its own problems. EuroSAT has no official test split and its images are 64×64. We built a stratified 80/20 split and upsampled the images to 96×96, so the students and augmentations stayed unchanged. Fitting the RBF SVM on all 21.6k training images took more than 15 minutes per encoder. We therefore probed on a stratified 5,000-image labeled subset, which also mirrors STL-10's 5k labeled set and keeps the label fractions comparable between the two datasets.
 
