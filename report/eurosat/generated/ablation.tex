@@ -2,7 +2,7 @@
 \begin{table}[t]
 \centering
 \footnotesize
-\caption{EuroSAT: Ablation grid: C $-$ B gap (pp) per unlabeled-data setting $\times$ student size. The 50\% setting halves both the data and the optimizer steps.}
+\caption{EuroSAT: Ablation grid: Distilled $-$ VICReg gap (pp) per unlabeled-data setting $\times$ student size. The 50\% setting halves both the data and the optimizer steps.}
 \label{eurosat:tab:ablation}
 \begin{tabular}{llcccc}
 \toprule
@@ -24,5 +24,5 @@ RBF SVM & 1\% & +3.4 (0.6)$^*$ & +10.7 (9.9)$^*$ & +4.8 (1.4)$^*$ & +3.7 (1.3)$^
  & 100\% & +2.9 (0.1)$^*$ & +8.6 (6.0)$^*$ & +2.8 (0.2)$^*$ & +5.2 (1.0)$^*$ \\
 \bottomrule
 \end{tabular}
-\par\smallskip{\footnotesize $\Delta$ = C $-$ B in pp, (reference sd = larger of B's and C's seed sd); $^*$ beyond spread, $|\Delta|$ $>$ reference sd.}
+\par\smallskip{\footnotesize $\Delta$ = Distilled $-$ VICReg in pp (reference sd = larger of the two seed sds); $^*$ beyond spread, $|\Delta|$ $>$ reference sd.}
 \end{table}

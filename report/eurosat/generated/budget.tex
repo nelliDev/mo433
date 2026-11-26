@@ -2,25 +2,25 @@
 \begin{table}[t]
 \centering
 \footnotesize
-\caption{EuroSAT: Training budget per run group (mean per run) and accuracy per GPU-hour (linear SVM, 100\% labels; C is charged the teacher cache and the teacher's pretraining estimate).}
+\caption{EuroSAT: Training budget per run group (mean per run) and accuracy per GPU-hour (linear SVM, 100\% labels; Distilled is charged the teacher cache and the teacher's pretraining estimate).}
 \label{eurosat:tab:budget}
 \begin{tabular}{lrrrrr}
 \toprule
 Group & Runs & GPU-h & Wall-h & Acc. & pp/GPU-h \\
 \midrule
-B-S, 100\% & 3 & 0.27 & 0.29 & 93.8 & 351 \\
-C-S, 100\% & 3 & 0.10 & 0.11 & 96.4 & 0.0311 \\
-B-S, 50\% & 3 & 0.13 & 0.15 & 87.7 & 650 \\
-C-S, 50\% & 3 & 0.05 & 0.06 & 95.9 & 0.0309 \\
-B-L, 100\% & 2 & 0.56 & 0.59 & 94.5 & 168 \\
-C-L, 100\% & 2 & 0.25 & 0.27 & 96.7 & 0.0312 \\
-B-L, 50\% & 2 & 0.28 & 0.31 & 92.0 & 325 \\
-C-L, 50\% & 2 & 0.13 & 0.15 & 96.4 & 0.0311 \\
+VICReg S, 100\% & 3 & 0.27 & 0.29 & 93.8 & 351 \\
+Distilled S, 100\% & 3 & 0.10 & 0.11 & 96.4 & 0.0311 \\
+VICReg S, 50\% & 3 & 0.13 & 0.15 & 87.7 & 650 \\
+Distilled S, 50\% & 3 & 0.05 & 0.06 & 95.9 & 0.0309 \\
+VICReg L, 100\% & 2 & 0.56 & 0.59 & 94.5 & 168 \\
+Distilled L, 100\% & 2 & 0.25 & 0.27 & 96.7 & 0.0312 \\
+VICReg L, 50\% & 2 & 0.28 & 0.31 & 92.0 & 325 \\
+Distilled L, 50\% & 2 & 0.13 & 0.15 & 96.4 & 0.0311 \\
 \midrule
-\multicolumn{2}{l}{Total B (GPU-h)} & 2.9 & & & \\
-\multicolumn{2}{l}{Total C distillation (GPU-h)} & 1.2 & & & \\
+\multicolumn{2}{l}{Total VICReg (GPU-h)} & 2.9 & & & \\
+\multicolumn{2}{l}{Total distillation (GPU-h)} & 1.2 & & & \\
 \multicolumn{2}{l}{Teacher cache, once (GPU-h)} & 0.09 & & & \\
-\multicolumn{2}{l}{C all-in incl.\ pretraining (GPU-h)} & 3{,}101 & & & \\
+\multicolumn{2}{l}{Distillation all-in incl.\ pretraining (GPU-h)} & 3{,}101 & & & \\
 \multicolumn{2}{l}{Teacher pretraining (estimate)} & 3{,}100 & & & \\
 \bottomrule
 \end{tabular}

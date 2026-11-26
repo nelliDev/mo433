@@ -45,6 +45,7 @@ from mo433.report import (
     FEATURE_SETS,
     LABEL_FRACS,
     PROBES,
+    ROW_NAME,
     TEACHER_PRETRAIN_GPU_H,
     ReportData,
     expected_encoders,
@@ -61,10 +62,9 @@ DATA_CODE = {100: "Full", 50: "Half"}
 SEED_CODE = {0: "Zero", 1: "One", 2: "Two", 3: "Three", 4: "Four"}
 FS_CODE = {"main": "", "ms_concat": "MsCat", "ms_randproj": "MsProj"}
 FS_LABEL = {"main": "main", "ms_concat": "s3+s4", "ms_randproj": "s3+s4 proj."}
-ROW_LABEL = {"A": "A (random init)", "B": "B (VICReg)", "C": "C (distilled)", "D": "D (teacher)"}
-D_FOOTNOTE = r"$^\dagger$D is one checkpoint: $\pm$ is the sd over the 3 label draws."
+D_FOOTNOTE = r"$^\dagger$The teacher is one checkpoint: $\pm$ is the sd over the 3 label draws."
 GAP_FOOTNOTE = (
-    r"$\Delta$ = C $-$ B in pp, (reference sd = larger of B's and C's seed sd); "
+    r"$\Delta$ = Distilled $-$ VICReg in pp (reference sd = larger of the two seed sds); "
     r"$^*$ beyond spread, $|\Delta|$ $>$ reference sd."
 )
 
@@ -117,9 +117,9 @@ def group_code(group: str) -> str:
 def group_label(group: str) -> str:
     k = parse_group(group)
     if k.row == "D":
-        return r"D$^\dagger$"
+        return r"Teacher$^\dagger$"
     data = "" if k.frac is None else f", {k.frac}\\%"
-    return f"{k.row}-{k.size}{data}"
+    return f"{ROW_NAME[k.row]} {k.size}{data}"
 
 
 def _seed_mean(values: Iterable[float]) -> tuple[float, float]:
@@ -354,7 +354,7 @@ def main_probes_table(data: ReportData) -> str:
         for size in config.SIZES:
             for group in (f"A-{size}", f"B-{size}-100", f"C-{size}-100"):
                 body.append(" & ".join([group_label(group)] + [pm(data.main.get((group, probe, lf))) for lf in LABEL_FRACS]) + r" \\")
-            body.append(" & ".join([rf"$\Delta$ C$-$B ({size})"] + [gap_cell(data.gaps.get((size, 100, probe, lf))) for lf in LABEL_FRACS]) + r" \\")
+            body.append(" & ".join([rf"$\Delta$ ({size})"] + [gap_cell(data.gaps.get((size, 100, probe, lf))) for lf in LABEL_FRACS]) + r" \\")
         body.append(" & ".join([group_label("D")] + [pm(data.main.get(("D", probe, lf))) for lf in LABEL_FRACS]) + r" \\")
     return _table(
         "Test accuracy (\\%) by probe and label fraction, 100\\% unlabeled data. Mean $\\pm$ sd over seeds "
@@ -373,7 +373,7 @@ def l_runs_table(data: ReportData) -> str:
         for group in [g for g in expected_groups() if parse_group(g).size == "L"]:
             for seed in config.SEEDS["L"]:
                 c = data.main.get((group, probe, LABEL_FRACS[0]))
-                name = f"A-L-s{seed}" if group == "A-L" else f"{group}-s{seed}"
+                name = f"{group_label(group)}, seed {seed}"
                 vals = []
                 for lf in LABEL_FRACS:
                     c = data.main.get((group, probe, lf))
@@ -397,7 +397,7 @@ def ablation_table(data: ReportData) -> str:
             body.append(" & ".join([first, f"{lf}\\%"] + cells) + r" \\")
     header = ["Probe", "Labels"] + [f"{s}, {f}\\% data" for s, f in cols]
     return _table(
-        "Ablation grid: C $-$ B gap (pp) per unlabeled-data setting $\\times$ student size. "
+        "Ablation grid: Distilled $-$ VICReg gap (pp) per unlabeled-data setting $\\times$ student size. "
         "The 50\\% setting halves both the data and the optimizer steps.",
         "tab:ablation", "llcccc", header, body, [GAP_FOOTNOTE] + _provisional_note(data), size=r"\footnotesize",
     )
@@ -418,7 +418,7 @@ def multiscale_table(data: ReportData) -> str:
 
 
 def costs_table(data: ReportData) -> str:
-    names = {"S": "ResNet96-S (A/B/C)", "L": "ResNet96-L (A/B/C)", "D": "ViT-S/16 (D)"}
+    names = {"S": "ResNet96-S (students)", "L": "ResNet96-L (students)", "D": "ViT-S/16 (teacher)"}
     px = {"S": 96, "L": 96, "D": 224}
     body = []
     for arch in ("S", "L", "D"):
@@ -448,15 +448,15 @@ def budget_table(data: ReportData) -> str:
             pct(g["acc"]), num(g["acc_per_gpu_h"], ".3g"),
         ]) + r" \\")
     body.append(r"\midrule")
-    for label, key, fmt in (("Total B (GPU-h)", "total_b", ".1f"), ("Total C distillation (GPU-h)", "total_c", ".1f"),
+    for label, key, fmt in (("Total VICReg (GPU-h)", "total_b", ".1f"), ("Total distillation (GPU-h)", "total_c", ".1f"),
                             ("Teacher cache, once (GPU-h)", "teacher_cache", ".2f"),
-                            ("C all-in incl.\\ pretraining (GPU-h)", "total_c_all_in", ",.0f")):
+                            ("Distillation all-in incl.\\ pretraining (GPU-h)", "total_c_all_in", ",.0f")):
         body.append(rf"\multicolumn{{2}}{{l}}{{{label}}} & {num(b[key], fmt).replace(',', '{,}')} & & & \\")
     pretrain = f"{TEACHER_PRETRAIN_GPU_H:,.0f}".replace(",", "{,}")
     body.append(rf"\multicolumn{{2}}{{l}}{{Teacher pretraining (estimate)}} & {pretrain} & & & \\")
     return _table(
         "Training budget per run group (mean per run) and accuracy per GPU-hour "
-        "(linear SVM, 100\\% labels; C is charged the teacher cache and the teacher's pretraining estimate).",
+        "(linear SVM, 100\\% labels; Distilled is charged the teacher cache and the teacher's pretraining estimate).",
         "tab:budget", "lrrrrr", ["Group", "Runs", "GPU-h", "Wall-h", "Acc.", "pp/GPU-h"], body,
         [r"Teacher pretraining: 1.16k GPU-h for 300 epochs (DINO Table~8), extrapolated linearly to 800 epochs."],
         size=r"\footnotesize",
@@ -482,13 +482,13 @@ def diagnostics_table(data: ReportData) -> str:
             return s if _nan(sd) else rf"{s} $\pm$ {format(sd * scale, fmt)}"
 
         body.append(" & ".join([
-            "D" if group == "D" else group_label(group), f("val_knn", 100, ".1f"), f("val_spread", 1, ".2f"), f("val_nmi"),
+            "Teacher" if group == "D" else group_label(group), f("val_knn", 100, ".1f"), f("val_spread", 1, ".2f"), f("val_nmi"),
             f("test_nmi"), f("test_ari"), flag,
         ]) + r" \\")
     return _table(
         "Unsupervised diagnostics, mean $\\pm$ sd over seeds. Validation split: $k$-NN accuracy (\\%), "
         "spread = per-dimension std $\\times\\sqrt{d}$, $k$-means NMI; test split: $k$-means NMI and ARI. "
-        "Flagged: collapse check fired (count/encoders); D: teacher sanity check.",
+        "Flagged: collapse check fired (count/encoders); Teacher: sanity check.",
         "tab:diagnostics", "lcccccc",
         ["Encoder", "Val $k$-NN", "Spread", "Val NMI", "Test NMI", "Test ARI", "Flagged"], body, [],
         size=r"\scriptsize",

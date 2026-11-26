@@ -2,25 +2,25 @@
 \begin{table}[t]
 \centering
 \footnotesize
-\caption{Training budget per run group (mean per run) and accuracy per GPU-hour (linear SVM, 100\% labels; C is charged the teacher cache and the teacher's pretraining estimate).}
+\caption{Training budget per run group (mean per run) and accuracy per GPU-hour (linear SVM, 100\% labels; Distilled is charged the teacher cache and the teacher's pretraining estimate).}
 \label{tab:budget}
 \begin{tabular}{lrrrrr}
 \toprule
 Group & Runs & GPU-h & Wall-h & Acc. & pp/GPU-h \\
 \midrule
-B-S, 100\% & 3 & 1.29 & 1.31 & 81.7 & 63.2 \\
-C-S, 100\% & 3 & 0.49 & 0.51 & 93.9 & 0.0303 \\
-B-S, 50\% & 3 & 0.64 & 0.66 & 78.7 & 123 \\
-C-S, 50\% & 3 & 0.24 & 0.25 & 92.8 & 0.0299 \\
-B-L, 100\% & 2 & 2.71 & 2.74 & 84.9 & 31.3 \\
-C-L, 100\% & 2 & 1.22 & 1.24 & 96.6 & 0.0311 \\
-B-L, 50\% & 2 & 1.35 & 1.38 & 81.6 & 60.6 \\
-C-L, 50\% & 2 & 0.61 & 0.63 & 95.3 & 0.0307 \\
+VICReg S, 100\% & 3 & 1.29 & 1.31 & 81.7 & 63.2 \\
+Distilled S, 100\% & 3 & 0.49 & 0.51 & 93.9 & 0.0303 \\
+VICReg S, 50\% & 3 & 0.64 & 0.66 & 78.7 & 123 \\
+Distilled S, 50\% & 3 & 0.24 & 0.25 & 92.8 & 0.0299 \\
+VICReg L, 100\% & 2 & 2.71 & 2.74 & 84.9 & 31.3 \\
+Distilled L, 100\% & 2 & 1.22 & 1.24 & 96.6 & 0.0311 \\
+VICReg L, 50\% & 2 & 1.35 & 1.38 & 81.6 & 60.6 \\
+Distilled L, 50\% & 2 & 0.61 & 0.63 & 95.3 & 0.0307 \\
 \midrule
-\multicolumn{2}{l}{Total B (GPU-h)} & 13.9 & & & \\
-\multicolumn{2}{l}{Total C distillation (GPU-h)} & 5.9 & & & \\
+\multicolumn{2}{l}{Total VICReg (GPU-h)} & 13.9 & & & \\
+\multicolumn{2}{l}{Total distillation (GPU-h)} & 5.9 & & & \\
 \multicolumn{2}{l}{Teacher cache, once (GPU-h)} & 0.83 & & & \\
-\multicolumn{2}{l}{C all-in incl.\ pretraining (GPU-h)} & 3{,}107 & & & \\
+\multicolumn{2}{l}{Distillation all-in incl.\ pretraining (GPU-h)} & 3{,}107 & & & \\
 \multicolumn{2}{l}{Teacher pretraining (estimate)} & 3{,}100 & & & \\
 \bottomrule
 \end{tabular}

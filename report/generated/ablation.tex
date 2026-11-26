@@ -2,7 +2,7 @@
 \begin{table}[t]
 \centering
 \footnotesize
-\caption{Ablation grid: C $-$ B gap (pp) per unlabeled-data setting $\times$ student size. The 50\% setting halves both the data and the optimizer steps.}
+\caption{Ablation grid: Distilled $-$ VICReg gap (pp) per unlabeled-data setting $\times$ student size. The 50\% setting halves both the data and the optimizer steps.}
 \label{tab:ablation}
 \begin{tabular}{llcccc}
 \toprule
@@ -24,5 +24,5 @@ RBF SVM & 1\% & +14.1 (0.6)$^*$ & +14.8 (0.3)$^*$ & +13.6 (0.8)$^*$ & +16.8 (0.7
  & 100\% & +11.4 (0.4)$^*$ & +13.7 (0.2)$^*$ & +10.1 (0.4)$^*$ & +12.4 (0.4)$^*$ \\
 \bottomrule
 \end{tabular}
-\par\smallskip{\footnotesize $\Delta$ = C $-$ B in pp, (reference sd = larger of B's and C's seed sd); $^*$ beyond spread, $|\Delta|$ $>$ reference sd.}
+\par\smallskip{\footnotesize $\Delta$ = Distilled $-$ VICReg in pp (reference sd = larger of the two seed sds); $^*$ beyond spread, $|\Delta|$ $>$ reference sd.}
 \end{table}

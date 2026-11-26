@@ -93,6 +93,9 @@ DIAGNOSTICS_COLUMNS = (
 PROBES = ("knn", "linear_svm", "rbf_svm")
 LABEL_FRACS = (1, 10, 50, 100)
 FEATURE_SETS = ("main", "ms_concat", "ms_randproj")
+# Display names of the rows in every generated table and figure (the letters stay internal).
+ROW_NAME = {"A": "Untrained", "B": "VICReg", "C": "Distilled", "D": "Teacher", "J": "LeJEPA"}
+GAP_NAME = "Distilled $-$ VICReg"
 TSNE_PANELS = ("A-S-s0", "B-S-100-s0", "C-S-100-s0", "D")  # spec §7.3: one per row
 
 # Teacher pretraining estimate (spec §4.1): 1.16k GPU-h / 300 ep x 800 ep.

@@ -2,23 +2,23 @@
 \begin{table}[t]
 \centering
 \scriptsize
-\caption{EuroSAT: Unsupervised diagnostics, mean $\pm$ sd over seeds. Validation split: $k$-NN accuracy (\%), spread = per-dimension std $\times\sqrt{d}$, $k$-means NMI; test split: $k$-means NMI and ARI. Flagged: collapse check fired (count/encoders); D: teacher sanity check.}
+\caption{EuroSAT: Unsupervised diagnostics, mean $\pm$ sd over seeds. Validation split: $k$-NN accuracy (\%), spread = per-dimension std $\times\sqrt{d}$, $k$-means NMI; test split: $k$-means NMI and ARI. Flagged: collapse check fired (count/encoders); Teacher: sanity check.}
 \label{eurosat:tab:diagnostics}
 \begin{tabular}{lcccccc}
 \toprule
 Encoder & Val $k$-NN & Spread & Val NMI & Test NMI & Test ARI & Flagged \\
 \midrule
-A-S & 54.3 $\pm$ 2.7 & 0.09 $\pm$ 0.01 & 0.279 $\pm$ 0.015 & 0.254 $\pm$ 0.015 & 0.152 $\pm$ 0.014 & anchor \\
-B-S, 100\% & 93.4 $\pm$ 0.5 & 0.75 $\pm$ 0.00 & 0.764 $\pm$ 0.006 & 0.773 $\pm$ 0.031 & 0.733 $\pm$ 0.048 & 0/3 \\
-C-S, 100\% & 94.3 $\pm$ 0.1 & 0.56 $\pm$ 0.01 & 0.775 $\pm$ 0.010 & 0.794 $\pm$ 0.015 & 0.736 $\pm$ 0.040 & 0/3 \\
-B-S, 50\% & 85.7 $\pm$ 7.5 & 0.69 $\pm$ 0.05 & 0.657 $\pm$ 0.088 & 0.612 $\pm$ 0.096 & 0.526 $\pm$ 0.115 & 0/3 \\
-C-S, 50\% & 93.6 $\pm$ 0.4 & 0.57 $\pm$ 0.01 & 0.775 $\pm$ 0.006 & 0.776 $\pm$ 0.010 & 0.703 $\pm$ 0.015 & 0/3 \\
-A-L & 58.3 $\pm$ 1.6 & 0.12 $\pm$ 0.00 & 0.292 $\pm$ 0.019 & 0.263 $\pm$ 0.020 & 0.149 $\pm$ 0.006 & anchor \\
-B-L, 100\% & 94.1 $\pm$ 0.7 & 0.77 $\pm$ 0.00 & 0.828 $\pm$ 0.007 & 0.807 $\pm$ 0.015 & 0.775 $\pm$ 0.032 & 0/2 \\
-C-L, 100\% & 94.9 $\pm$ 0.1 & 0.60 $\pm$ 0.01 & 0.773 $\pm$ 0.010 & 0.800 $\pm$ 0.003 & 0.729 $\pm$ 0.005 & 0/2 \\
-B-L, 50\% & 90.3 $\pm$ 1.0 & 0.70 $\pm$ 0.02 & 0.681 $\pm$ 0.018 & 0.674 $\pm$ 0.015 & 0.611 $\pm$ 0.011 & 0/2 \\
-C-L, 50\% & 93.3 $\pm$ 0.1 & 0.59 $\pm$ 0.00 & 0.791 $\pm$ 0.042 & 0.802 $\pm$ 0.015 & 0.750 $\pm$ 0.042 & 0/2 \\
-D & 92.6 & 0.75 & 0.773 & 0.756 & 0.708 & pass \\
+Untrained S & 54.3 $\pm$ 2.7 & 0.09 $\pm$ 0.01 & 0.279 $\pm$ 0.015 & 0.254 $\pm$ 0.015 & 0.152 $\pm$ 0.014 & anchor \\
+VICReg S, 100\% & 93.4 $\pm$ 0.5 & 0.75 $\pm$ 0.00 & 0.764 $\pm$ 0.006 & 0.773 $\pm$ 0.031 & 0.733 $\pm$ 0.048 & 0/3 \\
+Distilled S, 100\% & 94.3 $\pm$ 0.1 & 0.56 $\pm$ 0.01 & 0.775 $\pm$ 0.010 & 0.794 $\pm$ 0.015 & 0.736 $\pm$ 0.040 & 0/3 \\
+VICReg S, 50\% & 85.7 $\pm$ 7.5 & 0.69 $\pm$ 0.05 & 0.657 $\pm$ 0.088 & 0.612 $\pm$ 0.096 & 0.526 $\pm$ 0.115 & 0/3 \\
+Distilled S, 50\% & 93.6 $\pm$ 0.4 & 0.57 $\pm$ 0.01 & 0.775 $\pm$ 0.006 & 0.776 $\pm$ 0.010 & 0.703 $\pm$ 0.015 & 0/3 \\
+Untrained L & 58.3 $\pm$ 1.6 & 0.12 $\pm$ 0.00 & 0.292 $\pm$ 0.019 & 0.263 $\pm$ 0.020 & 0.149 $\pm$ 0.006 & anchor \\
+VICReg L, 100\% & 94.1 $\pm$ 0.7 & 0.77 $\pm$ 0.00 & 0.828 $\pm$ 0.007 & 0.807 $\pm$ 0.015 & 0.775 $\pm$ 0.032 & 0/2 \\
+Distilled L, 100\% & 94.9 $\pm$ 0.1 & 0.60 $\pm$ 0.01 & 0.773 $\pm$ 0.010 & 0.800 $\pm$ 0.003 & 0.729 $\pm$ 0.005 & 0/2 \\
+VICReg L, 50\% & 90.3 $\pm$ 1.0 & 0.70 $\pm$ 0.02 & 0.681 $\pm$ 0.018 & 0.674 $\pm$ 0.015 & 0.611 $\pm$ 0.011 & 0/2 \\
+Distilled L, 50\% & 93.3 $\pm$ 0.1 & 0.59 $\pm$ 0.00 & 0.791 $\pm$ 0.042 & 0.802 $\pm$ 0.015 & 0.750 $\pm$ 0.042 & 0/2 \\
+Teacher & 92.6 & 0.75 & 0.773 & 0.756 & 0.708 & pass \\
 \bottomrule
 \end{tabular}
 \end{table}

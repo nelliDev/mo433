@@ -5,12 +5,14 @@ A controlled, budget-matched comparison of a small student trained directly with
 ## Rows (what is A, B, C, D, J)
 
 Every probed encoder belongs to a row. All student rows use the same student architecture
-(ResNet96, below); only how its weights were obtained differs.
+(ResNet96, below); only how its weights were obtained differs. The letters are internal (run ids,
+configs, macro names such as `\AccBSFullLinTen`); every generated table and figure uses the
+names below (`report.ROW_NAME`), and a gap is written "Distilled − VICReg".
 
-| Row | Name | Weights come from | Role |
+| Row | Name in the report | Weights come from | Role |
 |---|---|---|---|
-| **A** | Random init | Nothing: Kaiming init, never trained; BatchNorm in `eval()` with default running stats | Baseline: tells "distillation helped" apart from "any pretraining helped" |
-| **B** | Direct training (VICReg) | Trained from scratch on the unlabeled images with VICReg (lightly defaults, 2 views per image, 3-layer expander of width 2048, discarded) | The comparison: the small convnet trained on its own |
+| **A** | Untrained | Nothing: Kaiming init, never trained; BatchNorm in `eval()` with default running stats | Baseline: tells "distillation helped" apart from "any pretraining helped" |
+| **B** | VICReg | Trained from scratch on the unlabeled images with VICReg (lightly defaults, 2 views per image, 3-layer expander of width 2048, discarded) | The comparison: the small convnet trained on its own |
 | **C** | Distilled | Trained to match the frozen teacher's feature of the same view: projector Linear(d,2048)-BN-GELU-Linear(2048,384), loss 1 − cosine, projector discarded | The proposed pipeline |
 | **D** | Teacher | DINO ViT-S/16 (`vit_small_patch16_224.dino`, 21.7M params, 384-d CLS token), frozen, never trained here; sees 224 px | Ceiling and cost reference |
 | **J** | LeJEPA (extra) | Like B but with the LeJEPA objective (SIGReg + view prediction), same views and optimizer | Second direct method: is the gap VICReg's or direct training's? |

@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 
 from mo433 import config
-from mo433.report import LABEL_FRACS, TSNE_PANELS, ReportData, parse_encoder
+from mo433.report import GAP_NAME, LABEL_FRACS, ROW_NAME, TSNE_PANELS, ReportData, parse_encoder
 
 ROW_COLOR = {"A": "#8C8C8C", "B": "#0072B2", "C": "#D55E00", "D": "#000000"}
 ROW_MARKER = {"A": "x", "B": "o", "C": "s", "D": "D"}
@@ -31,7 +31,6 @@ SIZE_STYLE = {"S": "--", "L": "-", None: ":"}
 FRAC_COLOR = {1: "#56B4E9", 10: "#009E73", 50: "#E69F00", 100: "#CC79A7"}
 CLASS_COLORS = ["#CC6677", "#332288", "#DDCC77", "#117733", "#88CCEE",
                 "#882255", "#44AA99", "#999933", "#AA4499", "#555555"]  # Tol muted + dark grey
-PANEL_TITLE = {"A": "A: random init", "B": "B: VICReg", "C": "C: distilled", "D": "D: DINO ViT-S/16"}
 
 
 def _plt():
@@ -74,7 +73,7 @@ def label_efficiency(data: ReportData, path: Path) -> Path | None:
         xs = [lf * 1.04 ** (i - len(present) / 2) for lf, c in zip(LABEL_FRACS, cells) if c]  # jitter
         ys = [100 * c.mean for c in cells if c]
         es = [100 * _nan_to_zero(c.sd) for c in cells if c]
-        label = "D (draw sd)" if g == "D" else g.replace("-100", "")
+        label = "Teacher (draw sd)" if g == "D" else f"{ROW_NAME[key.row]} {key.size}"
         ax.errorbar(xs, ys, yerr=es, color=ROW_COLOR[key.row], marker=ROW_MARKER[key.row], ms=5,
                     linestyle=SIZE_STYLE[key.size], capsize=2, label=label)
     ax.set_xscale("log")
@@ -97,7 +96,8 @@ def tsne_panels(data: ReportData, path: Path) -> Path | None:
     fig, axes = plt.subplots(1, 4, figsize=(8.0, 2.4))
     for ax, eid in zip(axes, TSNE_PANELS):
         row = parse_encoder(eid).row
-        ax.set_title(PANEL_TITLE[row] + ("" if row == "D" else f" ({eid})"), fontsize=7)
+        k = parse_encoder(eid)
+        ax.set_title("Teacher (DINO ViT-S/16)" if row == "D" else f"{ROW_NAME[row]} {k.size}, seed {k.seed}", fontsize=7)
         ax.set_xticks([]), ax.set_yticks([]), ax.grid(False)
         for spine in ax.spines.values():
             spine.set_visible(False)
@@ -150,7 +150,7 @@ def ablation_grid(data: ReportData, path: Path) -> Path | None:
                 text = f"{100 * g.gap:+.1f}{'*' if g.beyond else ''}{sd}"
                 dark = abs(100 * g.gap) > 0.6 * vmax
                 ax.text(j, i, text, ha="center", va="center", fontsize=7, color="white" if dark else "#111111")
-    fig.colorbar(im, ax=axes, shrink=0.8, label="C − B (pp), linear SVM")
+    fig.colorbar(im, ax=axes, shrink=0.8, label=GAP_NAME.replace("$-$", "−") + " (pp), linear SVM")
     return _save(fig, path)
 
 
@@ -180,7 +180,7 @@ def gap_vs_params(data: ReportData, path: Path) -> Path | None:
     ax.minorticks_off()
     ax.set_xlim(ticks[0] / 1.6, ticks[-1] * 1.6)
     ax.set_xlabel("student parameters")
-    ax.set_ylabel("C − B, linear-SVM accuracy (pp)")
+    ax.set_ylabel(GAP_NAME + ", linear SVM (pp)")
     ax.legend(fontsize=6.5, ncol=2, loc="best")
     return _save(fig, path)
 
