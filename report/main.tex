@@ -192,65 +192,53 @@ trained multi-scale fusion head was also rejected because it could adapt differe
 second architectural difference to the performance gap. Multi-scale features are instead tested with an evaluation-only probe (Section~\ref{sec:multiscale}). Features are always extracted in eval mode; for the untrained student this means BatchNorm uses its default running statistics,
 so its features do not depend on batch composition.
 
-\subsection{Training rows B and C}
+\subsection{Training the students}
 \label{sec:training}
 
-Both rows train for $E=100$ epochs with batch 256 (pairs for B, images for C), AdamW
-($\beta=(0.9,0.999)$, weight decay on all parameters), linear warmup followed by a per-step
-cosine decay to zero, bf16 autocast and channels-last memory layout. The learning rate,
-weight decay and warmup come from the Optuna study on B (Section~\ref{sec:tuning}) and are
-copied unchanged to C and to L. Only final-epoch weights are probed; per-epoch validation
-$k$-NN is logged for monitoring and never used for selection. B and C at the same size and
-data fraction therefore take the same number of optimizer steps.
+Both students train for $E=100$ epochs with batch 256 (pairs for VICReg, images for C), AdamW
+($\beta=(0.9,0.999)$, weight decay on the parameters). A linear warmup followed by a per-step
+cosine decay to zero was used, and bf16 autocast and channels-last memory layout. The learning rate,
+weight decay and warmup come from an Optuna trial on the VICReg student (Section~\ref{sec:tuning}) and are
+copied directly to the distilled student. Only the weights from the final epock were probed. Both students at the same size and data percentage thus take the same number of optimizer steps.
 
-\textbf{Row B} uses lightly's \texttt{VICRegLoss} with default coefficients
-($\lambda=\mu=25$, $\nu=1$) on a three-layer expander of width 2048, discarded after
-training. \textbf{Row C} maps the student feature through a projector
-$\mathrm{Linear}(d,2048)$--BN--GELU--$\mathrm{Linear}(2048,384)$, discarded after training,
+The directly trained students uses lightly's \texttt{VICRegLoss} with default coefficients
+($\lambda=\mu=25$, $\nu=1$) on a three-layer expander of width 2048, which is discarded after
+training. The distilled student maps the student feature through a projector
+$\mathrm{Linear}(d,2048)$--BN--GELU--$\mathrm{Linear}(2048,384)$, which is also discarded after training,
 and minimizes $1-\cos(\text{projector}(\text{student}(v)),\,\text{teacher}(v))$ averaged over
-the batch, where student and teacher see the same view $v$ (96 px and 224 px respectively).
-No labels, logits or classification heads are used in either row.
+the batch. The student and teacher see the same view (96 px and 224 px respectively).
+No labels, logits or classification heads are used in either setup.
 
 \subsection{Tuning protocol}
 \label{sec:tuning}
 
-All tuning was done on S and scored by $k$-NN ($k=20$, cosine) on the validation split,
-using the encoder's pooled feature, never a head. Per \citet{shi2022smallssl}, a weakly
-tuned B would inflate C's win, so B received the optimizer search and C inherits it.
+Tuning was done only on the S student and scored by $k$-NN ($k=20$, cosine) on the validation split,
+using the encoder's pooled feature. Per \citet{shi2022smallssl}, a weakly
+tuned VICReg student would inflate the distilled student's win, so VICReg received the optimizer search and the distilled student inherits it.
 
-\paragraph{Optimizer.} One Optuna study on B (S, 100\% data, 20 epochs, one seed per trial,
-TPE sampler, median pruner, 16 trials) over learning rate $\in[3\cdot10^{-4},3\cdot10^{-3}]$
+\paragraph{Optimizer.} One Optuna study using the smaller VICReg student was conducted with the following configuration: 100\% data, 20 epochs, one seed per trial, TPE sampler, median pruner, 16 trials) over learning rate $\in[3\cdot10^{-4},3\cdot10^{-3}]$
 (log), weight decay $\in[0.01,0.2]$ (log) and warmup $\in\{1,2,4\}$ epochs, with the
-default configuration ($10^{-3}$, 0.05, 2) queued as trial 0. The winner was learning rate
+default configuration ($10^{-3}$, 0.05, 2) queued as trial 0. The eventual winner was learning rate
 $2.86\cdot10^{-3}$, weight decay 0.110 and 2 warmup epochs, at 72.6\% validation $k$-NN
 against 66.0\% for the default (\texttt{tuning/optuna\_b.json}). Its learning rate lies close
 to the upper bound of the search space (Section~\ref{sec:limitations}).
-A LARS check (6 configurations, one seed each) did not change the decision.%
-\footnote{LARS on B (S, 20 epochs): base learning rate $\in\{0.2,1,2\}\times$ weight decay
-$\in\{10^{-6},10^{-4}\}$, scaled by batch/256. Best 70.8\% validation $k$-NN (base learning
-rate 2.0, weight decay $10^{-6}$, at the edge of the grid) against 72.6\% for the AdamW
-winner; tuned over 6 configurations, one seed each (\texttt{tuning/lars.json}).}
+A similar LARS check (6 configurations) did not change the decision.
 
-\paragraph{Equal-effort head grid.} With the winning optimizer, B's expander width and C's
+\paragraph{Equal-effort head tuning.} With the winning optimizer, VICReg's expander width and distilled's
 projector hidden width were each searched over $\{1024, 2048, 4096\}$ with 2 seeds per point
 (6 trials per row, 20 epochs). A width would replace 2048 only if its two-seed mean beat
-2048's by more than the larger of the two seed ranges. Both rows kept 2048: for B, 2048
-scored 72.4\% against 70.6\% (1024) and 70.4\% (4096); for C, 4096 led 2048 by 0.1~pp
-(89.8\% vs 89.7\%), well inside the 0.6~pp threshold (\texttt{tuning/grid\_\{B,C\}.json}).
-No completed tuning trial was collapse-flagged (the 9 pruned Optuna trials stopped before the
-check).
+2048's by more than the larger of the two seed ranges. Both architectures kept 2048 in the end. This keeps the projection head search fair on both models, because both got an equal number of experiments. 
 
-\paragraph{Fixed-view control.} One matched pair of B runs (S, 100\% data, 100 epochs, seed
-0, tuned settings), one on the pool and one on fresh augmentations at every step, tested
-whether the finite pool handicaps B. A pre-registered rule, fixed before the pair ran,
-would have moved every B run to on-the-fly augmentation if on-the-fly beat the pool by more
-than 2~pp validation $k$-NN. It did not fire: $\Delta_{\text{val}}=-0.2$~pp
+\paragraph{Fixed-view control.} Since a fixed-view pool was used to reduce compute budget, we needed to check whether a fixed pool would handicap the model. The experiment conducted to check this was as follows: One matched pair of VICReg runs (S, 100\% data, 100 epochs, seed
+0, tuned settings), one on the pool and one on fresh augmentations at every step. A pre-registered rule, fixed before the pair ran,
+would have moved every VICReg run to on-the-fly augmentation if that beat the pool by more
+than 2~pp validation $k$-NN. It did not: $\Delta_{\text{val}}=-0.2$~pp
 (\texttt{tuning/fixed\_view.json}); see Section~\ref{sec:limitations}.
 
 \subsection{Evaluation}
 \label{sec:eval}
 
-A single extraction function, behind an encoder registry that never branches on the row,
+An extraction function, behind an encoder registry that never branches on the row,
 computes frozen features in \texttt{eval()} mode under \texttt{no\_grad} with a
 deterministic transform: the native 96-pixel image for students (no resize or crop is
 needed at native resolution) and the teacher input of Section~\ref{sec:encoders}. Features
