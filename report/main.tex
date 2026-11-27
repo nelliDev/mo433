@@ -184,7 +184,7 @@ Every encoder is evaluated the same way: freeze the weights and fit simple class
 
 The SVM hyperparameters were chosen by a 5-fold cross-validation on the entire labeled set, using a small VICReg encoder with 100\% data, frozen thereafter for every other run, yielding $C=0.01$ for the linear SVM and $C=100$, $\gamma=\texttt{scale}$ for the RBF SVM. This favors the VICReg student, so it doesn't explain distillation's win. 
 
-\paragraph{Diagnostics.} During the runs, we checked for collapse by measuring its $k$-NN accuracy or $k$-means ($k=10$) NMI on the validation split and comparing it to the untrained student's metrics. Specifically, if its spread (per-dimension standard deviation of the L2-normalized embeddings, times $\sqrt d$) falls below 0.3, which means most of the embeddings live in just a few dimensions. 
+\paragraph{Diagnostics.} During the runs, we checked for collapse on the validation split. An encoder is flagged if its $k$-NN accuracy or its $k$-means ($k=10$) NMI is no better than the untrained student's at the same size and seed, or if its spread (per-dimension standard deviation of the L2-normalized embeddings, times $\sqrt d$) falls below 0.3, which means most of the embeddings live in just a few dimensions. On the test split, we also report $k$-means NMI and ARI, which measure whether the classes form clusters without any labels, and a t-SNE projection with the same settings for all encoders. 
 
 The probe results are averaged over the label draws of a seed and then summarized as a mean $\pm$ standard deviation over the seeds. The results therefore compare training runs. Since the teacher is a loaded checkpoint, its $\pm$ is the spread over draws. We only consider a difference between the distilled and VICReg student to be significant if the gap exceeds the larger of the seed standard deviations.
 
@@ -249,14 +249,14 @@ It depends on how you count it, especially whether we include the pretraining bu
   \label{fig:tsne}
 \end{figure}
 
-Mostly yes. The ordering is preserved (Untrained < VICReg < Distilled < Teacher on all metrics in STL-10), but the spread is different. Since VICReg's variance term pushes each dimension's standard deviation up, compared to a single view matching with teacher in the distilled student, it is expected that the directly trained student presents higher spread. And as Section~\ref{sec:eurosat} shows, the out-of-domain order changes with the teacher dropping position, even behind VICReg.
+Mostly yes. The ordering is preserved (Untrained < VICReg < Distilled < Teacher on all metrics in STL-10), but the spread is different. Since VICReg's variance term pushes each dimension's standard deviation up, compared to a single view matching with teacher in the distilled student, it is expected that the directly trained student presents higher spread. Out of domain the order changes: on EuroSAT, the teacher's validation $k$-NN, NMI and ARI fall behind both students, even VICReg (\texttt{report/eurosat/generated/diagnostics.tex} in the repository).
 
 The project brief also asks what changes when two encoders score the same on the SVM but differ in NMI. This is most visible across distinct seeds of the distilled student: the linear-SVM standard deviation of the large distilled student with 100\% data is \AccSdCLFullLinHundred~pp, while its test ARI varies by $\pm$\,0.09, its test NMI by $\pm$\,0.04. K-means uses fixed seeds, so k-means instability is unlikely to be the main source of the variation. Even then, a different geometry can land k-means in a different local optimum, so the variation probably comes from the encoders, but some of it may be amplified by k-means itself. 
 
 \subsection{Q5: Does the gap change with student size?}
 \label{sec:q5}
 
-Only slightly. As the table shows, the gap measured in pp is pretty much flat across the two main sizes and the four of Section~\ref{sec:sizes}. VICReg doesn't come close to beating distillation. However, the distilled model has a significant improvement in performance in terms of error ratio against VICReg. The hypothesis that states that a directly trained student would eventually beat a distilled one as size increases seems to fail, at least at this scale. Then again, the VICReg student seems to be undertrained (Section~\ref{sec:q6}).
+Only slightly. As the table shows, the gap measured in pp is pretty much flat across the two main sizes and the four of Section~\ref{sec:sizes}. VICReg doesn't come close to beating distillation. However, in terms of error ratio, distillation's advantage grows: the distilled student's share of VICReg's errors falls as size grows. The hypothesis that states that a directly trained student would eventually beat a distilled one as size increases seems to fail, at least at this scale. Then again, the VICReg student seems to be undertrained (Section~\ref{sec:q6}).
 
 That being said, we only tested increasing the width of the network, not depth. Perhaps a deeper network (and more training) would give more concrete results.
 
@@ -278,7 +278,7 @@ instead of all 100k images, for both sizes, same seeds, epochs and probes. Epoch
 stay the same, so the 50\% runs also take half the optimizer steps, so the ablation varies a joint
 data-and-compute budget, not data alone.
 
-Going into this, we expected that a smaller budget should favour distillation, since it has a teacher that supplies a good target for every image, while the other student has to learn from scratch. We confirm that in our findings. As we use less data, distillation wins by an ever-greater margin. This is mostly due to the VICReg student getting worse, while the distilled student better maintains its performance. The widening may be larger for the large student with very few labels, but this rests on two seeds. 
+Going into this, we expected that a smaller budget should favour distillation, since it has a teacher that supplies a good target for every image, while the other student has to learn from scratch. We confirm that in our findings. With less data, distillation wins by a wider margin. This is mostly due to the VICReg student getting worse, while the distilled student better maintains its performance. The widening may be larger for the large student with very few labels, but this rests on two seeds. 
 
 \subsection{Eval-only multi-scale probe}
 \label{sec:multiscale}
