@@ -37,6 +37,8 @@
   \vspace{1.2cm}
   {\large Jo\~ao Deltregia Martinelli\par}
   {RA 248342\par}
+  \vspace{0.3cm}
+  {Delivery date: \today\par}
   \vspace{1.2cm}
   \begin{minipage}{0.88\linewidth}
   \section*{Summary}
@@ -68,65 +70,20 @@ We compare the distillation versus direct training in a controlled setting: one 
 \label{sec:related}
 
 \paragraph{Self-supervised representation learning.}
-Most self-supervised models train by learning to match two vies of the same image, differing mainly in how they prevent collapse (trivially mapping each image to the same point).  SimCLR~\citep{chen2020simclr} pushes treats different images of the batch as negative examples, pushing them away. This requires larege batches and long schedules. BYOL~\citep{grill2020byol} doesn't use the concept of negatives and instead forces a network to predict a slow-moving near copy of itself. DINO~\citep{caron2021dino} turns this into self-distillation, producing ViT features that are good nearest-neighbour classifiers. VICReg~\citep{bardes2022vicreg} explicitly keeps every embedding dimension variable and decorrelated. LeJEPA~\citep{balestriero2025lejepa} replaces heuristics with a single regularizer that shapes the embedding space towards an isotropic Gaussian. In addition to this there are masked approaches that take a different route, such as I-JEPA~\citep{assran2023ijepa} which predicts the representations of hidden image regions, and MAE~\citep{he2022mae} predicts hidden pixels. These models often have very large encoders, long schedules and enormous datasets. In this project, we are more interested in how this objectives behave on a small convnet.
+Most self-supervised models train by learning to match two views of the same image, differing mainly in how they prevent collapse (trivially mapping each image to the same point).  SimCLR~\citep{chen2020simclr} treats different images of the batch as negative examples, pushing them away. This requires large batches and long schedules. BYOL~\citep{grill2020byol} doesn't use the concept of negatives and instead forces a network to predict a slow-moving near copy of itself. DINO~\citep{caron2021dino} turns this into self-distillation, producing ViT features that are good nearest-neighbour classifiers. VICReg~\citep{bardes2022vicreg} explicitly keeps every embedding dimension variable and decorrelated. LeJEPA~\citep{balestriero2025lejepa} replaces heuristics with a single regularizer that shapes the embedding space towards an isotropic Gaussian. In addition to this there are masked approaches that take a different route, such as I-JEPA~\citep{assran2023ijepa} which predicts the representations of hidden image regions, and MAE~\citep{he2022mae} predicts hidden pixels. These models often have very large encoders, long schedules and enormous datasets. In this project, we are more interested in how these objectives behave on a small convnet.
 
 \paragraph{Knowledge distillation and self-supervised distillation.}
-Classical distillation~\citep{hinton2015distilling} usually trains a student netowrk on a teacher's class probabilities. This means it needs labels. SEED~\citep{fang2021seed}, CompRess~\citep{koohpayegani2020compress} and DisCo~\citep{gao2022disco} map the idea to self-supervised teachers and finds it helps exactly the small, efficient students. The works use convnet teachers and students on ImageNet, comparing a direct baseline training at the same number of student epochs. DiscCo finds that a narrow student embedding bottlnecks distillations, so we chose to keep a wide projector on our ``ResNet96''.
+Classical distillation~\citep{hinton2015distilling} usually trains a student network on a teacher's class probabilities. This means it needs labels. SEED~\citep{fang2021seed}, CompRess~\citep{koohpayegani2020compress} and DisCo~\citep{gao2022disco} map the idea to self-supervised teachers and find it helps exactly the small, efficient students. The works use convnet teachers and students on ImageNet, comparing a direct baseline training at the same number of student epochs. DisCo finds that a narrow student embedding bottlenecks distillation, so we chose to keep a wide projector on our ``ResNet96''.
 
 \paragraph{Cross-architecture distillation.}
-To enable distilling students from teachers of other architectures (such as transformers), we have to align their intermediate features. \citet{liu2022crossarch} align them with learned cross-attention projectors. OFA-KD~\citep{hao2023ofakd} shows the mismatch with CKA and moves the alignment to the output. They are both supervised. We avoid this problem completely by distilling only the teacher's final embedding through a leanred projector without labels.
+To enable distilling students from teachers of other architectures (such as transformers), we have to align their intermediate features. \citet{liu2022crossarch} align them with learned cross-attention projectors. OFA-KD~\citep{hao2023ofakd} shows the mismatch with CKA and moves the alignment to the output. They are both supervised. We avoid this problem completely by distilling only the teacher's final embedding through a learned projector without labels.
 
 \paragraph{Closest work.}
-We found two works that frame a question similar to the project's but from opposite sides. \citet{shi2022smallssl} argue that the teacher increases trainig cost in distillation and defend that small models can close the gap by properly tuning a direct training process. This motivated us to give the VICReg student all the tuning and optimization effort (Section~\ref{sec:tuning}). \citet{farhat2024distillalt} disagrees, favoring the distilled method in both performance and cost, but uses a supervised setting and does not consider the cost of the teacher's training.
+We found two works that frame a question similar to the project's but from opposite sides. \citet{shi2022smallssl} argue that the teacher increases training cost in distillation and defend that small models can close the gap by properly tuning a direct training process. This motivated us to give the VICReg student all the tuning and optimization effort (Section~\ref{sec:tuning}). \citet{farhat2024distillalt} disagrees, favoring the distilled method in both performance and cost, but uses a supervised setting and does not consider the cost of the teacher's training.
 
 \paragraph{What is left open.}
-Related work disagrees on which approach is best, but they both use ImageNet-like data and don't count the cost of the teacher. There is an undocumented gap focused on where disillation from a frozen self-supervised ViT stops beating direct self-supervised training of a small convnet. We aim to answer that question across a variety of student sizes, unlabeled data ratio, training length, data domains and under a budget that includes the teacher.
+Related work disagrees on which approach is best, but they both use ImageNet-like data and don't count the cost of the teacher. There is an undocumented gap focused on where distillation from a frozen self-supervised ViT stops beating direct self-supervised training of a small convnet. We aim to answer that question across a variety of student sizes, unlabeled data ratio, training length, data domains and under a budget that includes the teacher.
 
-\paragraph{Self-supervised representation learning.}
-The most popular methods, called joint-embedding, optimize to align the representations of two views of an image.
-SimCLR~\citep{chen2020simclr} uses negative in-batch examples and needs large batches and long
-schedules. BYOL~\citep{grill2020byol} does not rely on negatives and predicts a moving-average target
-network with an asymmetric architecture; DINO~\citep{caron2021dino} turns this into self-distillation without labels and yields ViT features that are strong $k$-NN classifiers; VICReg~\citep{bardes2022vicreg} prevents collapse explicitly with variance, invariance and covariance terms, without negatives or a momentum encoder. LeJEPA~\citep{balestriero2025lejepa} replaces such heuristics with a single regularizer that pushes the embedding towards an isotropic Gaussian. I-JEPA~\citep{assran2023ijepa} predicts the representations of masked target blocks, and MAE~\citep{he2022mae} reconstructs masked pixels and is strongest under fine-tuning rather than frozen probes. These works study large encoders and
-do not ask how a \emph{small} convnet trained this way compares with one distilled from a
-large teacher at equal compute. We use DINO as the teacher, and VICReg, the brief's suggested default for a modest GPU, and LeJEPA as the direct methods.
-
-\paragraph{Knowledge distillation and self-supervised distillation.}
-Classical distillation~\citep{hinton2015distilling} trains a student on a teacher's softened
-class probabilities; it is supervised, and the teacher's training cost is taken as given.
-SEED~\citep{fang2021seed}, CompRess~\citep{koohpayegani2020compress} and
-DisCo~\citep{gao2022disco} show that a self-supervised teacher can improve the performance of small students for
-which contrastive learning performs poorly: SEED, for example, lifts an EfficientNet-B0
-from 42\% to 67\% ImageNet linear accuracy. All three distil
-convnet teachers into convnet students on ImageNet, compare against a direct-SSL baseline
-trained for the same student epochs, and do not charge the teacher's pretraining or forward
-cost to the student. DisCo's finding that the student's embedding dimension can bottleneck
-distillation motivates the 2048-wide projector we keep in the distilled student.
-
-\paragraph{Cross-architecture distillation.}
-Distilling a Transformer into a CNN needs care in how features are aligned:
-\citet{liu2022crossarch} project student features into the teacher's space with
-cross-attention and group-wise linear projectors, and OFA-KD~\citep{hao2023ofakd} shows with
-CKA that heterogeneous architectures diverge in their intermediate features and aligns them
-in logit space. Both are supervised. We therefore distil only the teacher's final pooled
-embedding, through a learned projector, without labels.
-
-\paragraph{Closest work.}
-\citet{shi2022smallssl} argue that distillation is costly in resource-limited settings
-because of the teacher, and show that small self-supervised models trained directly close
-much of the gap once their training is tuned; this is why the VICReg student receives the full tuning
-effort here (Section~\ref{sec:tuning}). The closest prior work to our question is
-\citet{farhat2024distillalt}, who find that small models distilled from a pretrained teacher
-(including Transformer--convnet pairs) match or beat pretrain-then-finetune at a fraction
-of the cost, and note that the effect tends not to occur when the task is data-limited.
-Their distillation is task-specific rather than unlabeled representation distillation,
-and their speed-up does not charge the teacher's pretraining.
-
-\paragraph{What is left open.}
-No prior work measures \emph{where} distillation from a frozen self-supervised ViT stops
-beating direct self-supervised training of a small convnet as student size and unlabeled
-data vary, under a budget that includes the teacher. We locate that crossover (or show
-that it lies outside the tested range) with matched student budgets, seed-level spreads,
-and an accounting that includes the teacher's published pretraining cost.
 
 % =====================================================================================
 \section{Method}
@@ -206,7 +163,7 @@ tuned VICReg student would inflate the distilled student's win, so VICReg receiv
 default configuration ($10^{-3}$, 0.05, 2) queued as trial 0. The eventual winner was learning rate
 $2.86\cdot10^{-3}$, weight decay 0.110 and 2 warmup epochs, at 72.6\% validation $k$-NN
 against 66.0\% for the default (\texttt{tuning/optuna\_b.json}). Its learning rate lies close
-to the upper bound of the search space (Section~\ref{sec:limitations}).
+to the upper bound of the search space.
 A similar LARS check (6 configurations) did not change the decision.
 
 \paragraph{Equal-effort head tuning.} With the winning optimizer, VICReg's expander width and distilled's
@@ -218,14 +175,14 @@ projector hidden width were each searched over $\{1024, 2048, 4096\}$ with 2 see
 0, tuned settings), one on the pool and one on fresh augmentations at every step. A pre-registered rule, fixed before the pair ran,
 would have moved every VICReg run to on-the-fly augmentation if that beat the pool by more
 than 2~pp validation $k$-NN. It did not: $\Delta_{\text{val}}=-0.2$~pp
-(\texttt{tuning/fixed\_view.json}); see Section~\ref{sec:limitations}.
+(\texttt{tuning/fixed\_view.json}).
 
 \subsection{Evaluation}
 \label{sec:eval}
 
-Every encoder is evaluated the same way: freeze the weights and fit simple classifiers on top of its features to measure how useful the features are. The features were extracted in eval mode using a deterministic transform (the original 96-pixel image for the students, the teacher input of Section~\ref{sec:encoders}), L2-normalized and standardized with the statistics of the labeled training set. We measured the features space with three different probes: $k$-NN (cosine, $k=\min(20, n_{\text{per class}})$, no tuning), a linear SVM and an RBF SVM. $k$-NN checks if images of the same class are close. The linear SVM checks if they are seperable by a hyperplane, and RBF SVM expands that by allowing curved boundaries.
+Every encoder is evaluated the same way: freeze the weights and fit simple classifiers on top of its features to measure how useful the features are. The features were extracted in eval mode using a deterministic transform (the original 96-pixel image for the students, the teacher input of Section~\ref{sec:encoders}), L2-normalized and standardized with the statistics of the labeled training set. We measured the features space with three different probes: $k$-NN (cosine, $k=\min(20, n_{\text{per class}})$, no tuning), a linear SVM and an RBF SVM. $k$-NN checks if images of the same class are close. The linear SVM checks if they are separable by a hyperplane, and RBF SVM expands that by allowing curved boundaries.
 
-The SVM hyperparamaters were chosen by a 5-fold cross-validation on the entire labeled set, using a small VICReg encoder with 100\% data, frozen thereafter for every other run, yielding $C=0.01$ for the linear SVM and $C=100$, $\gamma=\texttt{scale}$ for the RBF SVM. This favors the VICReg student, so it doesn't explain distillation's win. 
+The SVM hyperparameters were chosen by a 5-fold cross-validation on the entire labeled set, using a small VICReg encoder with 100\% data, frozen thereafter for every other run, yielding $C=0.01$ for the linear SVM and $C=100$, $\gamma=\texttt{scale}$ for the RBF SVM. This favors the VICReg student, so it doesn't explain distillation's win. 
 
 \paragraph{Diagnostics.} During the runs, we checked for collapse by measuring its $k$-NN accuracy or $k$-means ($k=10$) NMI on the validation split and comparing it to the untrained student's metrics. Specifically, if its spread (per-dimension standard deviation of the L2-normalized embeddings, times $\sqrt d$) falls below 0.3, which means most of the embeddings live in just a few dimensions. 
 
@@ -352,7 +309,7 @@ Beyond the initial 20 runs, we ran four extra experiments using the frozen confi
 
 \paragraph{Setup.} EuroSAT RGB~\citep{helber2019eurosat} consists of 27k satellite images of 10 classes, each a different land use. These images are very different from ImageNet's, so the teacher has never seen this domain. Since the dataset has no official train/test split, we used a stratified 80\% for training and the remaining 20\% for test. The unlabeled set is the entire training set (labels removed), and a stratified 5k-image subset of it is the labeled set for the probes. To match the student input, the 64$\times$64 images were upscaled to 96$\times$96 pixels. The full study was rerun with the frozen settings, and the teacher passed its sanity check on this data. 
 
-\paragraph{Results.} Out of the teacher's domain, distillation's advantage against VICReg shrinks significantly, and so does the teacher's. In this setup, both the distilled and VICReg student were able to match or even outperform the teacher with few labels. At 1\% of labels, VICReg ties or wins agains the other methods. With all labels, distilled student is still able to match teacher performance. This means part of the gap measured with STL-10 comes from the fact that the teacher was pretrained on ImageNet. One caveat of these results is that EuroSAT is an easier task, as even the untrained student was able to get better performance compared with the STL-10 dataset. Also, the teacher sees a heavily upsampled images from 64 pixels to 224 pixels. 
+\paragraph{Results.} Out of the teacher's domain, distillation's advantage against VICReg shrinks significantly, and so does the teacher's. In this setup, both the distilled and VICReg student were able to match or even outperform the teacher with few labels. At 1\% of labels, VICReg ties or wins against the other methods. With all labels, distilled student is still able to match teacher performance. This means part of the gap measured with STL-10 comes from the fact that the teacher was pretrained on ImageNet. One caveat of these results is that EuroSAT is an easier task, as even the untrained student was able to get better performance compared with the STL-10 dataset. Also, the teacher sees heavily upsampled images from 64 pixels to 224 pixels. 
 
 \subsection{A second direct method: LeJEPA}
 \label{sec:lejepa}
@@ -456,7 +413,7 @@ Since we covered more than one student objective and dataset, the main limitatio
 
 % =====================================================================================
 
-AI tools were useful in coding the training scripts at the student's (the author, not the model) discretion. This includes conducting the optuna study, generator scripts for figures and tables as well as organizing the repository and making sure everything is reproducible. AI was also used to help understand course topics, related work and revising the final report. 
+AI tools were useful in coding the training scripts at the student's (the author, not the model) discretion. This includes conducting the Optuna study, generator scripts for figures and tables as well as organizing the repository and making sure everything is reproducible. AI was also used to help understand course topics, related work and revising the final report. 
 \clearpage
 \section{Conclusion}
 \label{sec:conclusion}
