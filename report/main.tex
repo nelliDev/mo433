@@ -43,20 +43,19 @@
   \begin{minipage}{0.88\linewidth}
   \section*{Summary}
   \raggedright
-We test whether distilling a frozen self-supervised DINO ViT-S/16 into a small residual
-convnet (row C) beats training the same convnet from scratch with VICReg (row B) on STL-10,
+% FIX: "Distillation wins in every one of the settings" is false once EuroSAT is in the first
+% sentence (VICReg ties/wins at 1% labels there), and the range macros are STL-10 only.
+% Scope the claim to STL-10 and add one clause on EuroSAT. Also: "much more efficient, in
+% terms of performance-per-hour" says the same thing twice.
+We tested whether distilling a frozen self-supervised DINO ViT-S/16 model into a small residual
+convnet beats training the same convnet from scratch with VICReg or LeJEPA on STL-10 and EuroSAT,
 for two student sizes (1.57M and 6.28M parameters) and two amounts of unlabeled data (100\%
 and 50\%), under an identical student training budget and with frozen-feature probes shared
-by all encoders. Distillation wins in every one of the 48 settings (2 sizes $\times$ 2 data
-amounts $\times$ 3 probes $\times$ 4 label fractions), by \GapLFullRbfHundred{} to
-\GapLHalfLinOne~pp, always beyond the seed-to-seed spread; at 10\% labels the small
+by all encoders. Distillation wins in every one of the settings by \GapLFullRbfHundred{} to
+\GapLHalfLinOne~pp. At 10\% labels the small
 distilled student reaches \AccCSFullLinTen\% linear-SVM accuracy against \AccBSFullLinTen\%
-for VICReg. Halving the unlabeled data (and with it the optimizer steps) widens the gap for
-both sizes, and the gap shrinks only slightly from the small to the large student, so no
-crossover appears in the range we can afford. The verdict reverses once the teacher's
-pretraining cost (an estimated \GpuHTeacherPretrain~GPU-h) is charged: per GPU-hour, direct
-training is about three orders of magnitude more efficient. All runs are short (100 epochs
-on a laptop GPU) and should be read as undertrained.
+for VICReg. With half the data, the gap widens for
+both sizes, and shrinks slightly from the small to large student. The verdict reverses once the teacher's pretraining cost (an estimated \GpuHTeacherPretrain~GPU-h) is considered: per GPU-hour, direct training is much more efficient, in terms of performance-per-hour.
   \end{minipage}
 \end{titlepage}
 
@@ -64,36 +63,22 @@ on a laptop GPU) and should be read as undertrained.
 \section{Introduction}
 \label{sec:intro}
 
+% FIX typos: comparitavely, obective. Stray space before the comma after \citep{bardes2022vicreg}.
+% SUGGEST: state the brief's hypothesis here (distillation wins for small students and small
+% budgets; direct training catches up as student, data and epochs grow). Related work's "What
+% is left open" and Q5/Q6 refer back to that crossover, but the intro never introduces it.
 Self-supervised learning has gained popularity in the last couple of years due to its strong results and comparitavely less need for labeled data. The whole training process, however, is prohibitively expensive for many users. Even fine-tuning pre-trained models is still very expensive and the architectures produced usually surpass the application's compute budget. When we need a small lightweight model with self-supervised performance level, distillation can be a viable option. The alternative is training a lightweight model, such as a convnet, from scratch with a self-supervised obective. This project compares these two approaches and gives insight on what matters for a good lightweight model.
 
-We compare the distillation versus direct training in a controlled setting: one frozen teacher (DINO ViT-S/16~\citep{caron2021dino}), a direct method (VICReg~\citep{bardes2022vicreg}) , one student family designed for 96-pixel inputs at two widths, and two amounts of unlabeled STL-10 data~\citep{coates2011stl10}. The final comparison table compares 4 models: the student architecture with no training, trained from-scratch with VICReg, distilled from the teacher model, and the teacher itself. Additionally, we also trained the student architecture with the LeJEPA objective. 
-
-
-% Self-supervised pretraining produces strong but large encoders, while many applications need
-% a small convnet. Two routes lead there: train the small network directly with a
-% self-supervised objective, or distil a large, already-pretrained self-supervised teacher
-% into it. The second route needs no labels either, but it relies on a teacher whose
-% pretraining cost exceeds the student's budget by orders of magnitude. Which route is better
-% is not a fixed answer: the course brief hypothesizes that distillation wins for small
-% students and small data or compute budgets, and that direct training catches up as the
-% student, the data and the epochs grow.
-
-% We measure the distillation-minus-direct gap (\CB) in a controlled setting: one frozen
-% teacher (DINO ViT-S/16~\citep{caron2021dino}), one direct method
-% (VICReg~\citep{bardes2022vicreg}), one student family designed for 96-pixel inputs at two
-% widths, and two amounts of unlabeled STL-10 data~\citep{coates2011stl10}. B and C share
-% architecture, initialization, views, optimizer, epochs, steps and batch size; the teacher's
-% costs are recorded separately so that the comparison can also be made per GPU-hour. A
-% difference counts only if it exceeds the seed-to-seed spread. Two reference rows complete
-% the design: the student at random initialization (A), which separates ``distillation
-% helped'' from ``any training helped'', and the teacher itself (D), which shows how much of
-% the teacher survives compression.
+We compare the distillation versus direct training in a controlled setting: one frozen teacher (DINO ViT-S/16~\citep{caron2021dino}), a direct method (VICReg~\citep{bardes2022vicreg}) , one student family designed for 96-pixel inputs at two widths, and two amounts of unlabeled STL-10 data~\citep{coates2011stl10}. The main comparison table compares 4 models: the student architecture with no training, trained from-scratch with VICReg, distilled from the teacher model, and the teacher itself. Additionally, we trained the student architecture with the LeJEPA objective, ran more student sizes and training lengths, and compared the out-of-domain EuroSAT dataset.
 
 % =====================================================================================
 \section{Related work}
 \label{sec:related}
 
 \paragraph{Self-supervised representation learning.}
+% FIX (section not yet rewritten by you): "We use DINO and Le-JEPA as the teacher" is wrong:
+% DINO is the teacher; VICReg and LeJEPA are the direct methods. Add a LeJEPA sentence +
+% \citep{balestriero2025lejepa} to this paragraph. Typos: assymetrical; "isn't reliant".
 The most popular methods, called joint-embedding, optimize to align the representations of two views of an image.
 SimCLR~\citep{chen2020simclr} uses negative in-batch examples and needs large batches and long
 schedules. BYOL~\citep{grill2020byol} isn't reliant on negatives and predicts a moving-average target
@@ -110,6 +95,7 @@ which contrastive learning performs poorly: SEED, for example, lifts an Efficien
 from 42\% to 67\% ImageNet linear accuracy. All three distil
 convnet teachers into convnet students on ImageNet, compare against a direct-SSL baseline
 trained for the same student epochs, and do not charge the teacher's pretraining or forward
+% FIX: "row C" -> the distilled student.
 cost to the student. DisCo's finding that the student's embedding dimension can bottleneck
 distillation motivates the 2048-wide projector we keep in row C.
 
@@ -122,6 +108,7 @@ in logit space. Both are supervised. We therefore distil only the teacher's fina
 embedding, through a learned projector, without labels.
 
 \paragraph{Closest work.}
+% FIX: "row B" -> the VICReg student.
 \citet{shi2022smallssl} argue that distillation is costly in resource-limited settings
 because of the teacher, and show that small self-supervised models trained directly close
 much of the gap once their training is tuned; this is why row B receives the full tuning
@@ -151,23 +138,24 @@ images at $96\times96$ pixels forming 10 classes. All 100k unlabeled images are 
 self-supervised training and distillation.
 To ensure consistency, the images are stored in a seeded random order, and the ablation subset is the first 50 thousand images of that order. 
 
-% The labeled training set has three uses: (i)~A 10\% validation split (500 images, split evenly across classes) scores every tuning and selection choice before actually training, with the remaining 90\% as the $k$-NN neighbour bank.
-% (ii)~Five stratified folds of the full labeled set select the SVM hyperparameters.
-% (iii)~The reported probes are fitted on label fractions of 1\%, 10\%, 50\% and 100\% of the
-% full labeled set, three stratified draws each, generated exactly as in the brief
-% (\texttt{random\_state} = draw). The test split is used only for the reported numbers and
-% informs no choice. Every encoder is probed on the same subsets.
+% FIX: "before actually training" is unclear; the validation split scores choices made before
+% the final (reported) runs.
+The labeled training set has three uses: (i)~A 10\% validation split (500 images, split evenly across classes) scores every tuning and selection choice before actually training, with the remaining 90\% as the $k$-NN neighbour bank.
+(ii)~Five stratified folds of the full labeled set select the SVM hyperparameters.
+(iii)~The reported probes are fitted on label fractions of 1\%, 10\%, 50\% and 100\% of the
+full labeled set, three stratified draws each. The test split is used only for the reported numbers. Every encoder was probed on the same subsets.
 
 Seed $s$ initializes the student and seeds the sampler. The untrained student with seed $s$ is exactly the
 initial network of the trained students with seed $s$. The small student (S) uses seeds 0--2 and the
-large one (L) seeds 0--1. Runs seed Python, NumPy, PyTorch and the sampler but are not
-bitwise deterministic (cuDNN kernels, bf16 autocast).
+large one (L) seeds 0--1. Runs seed Python, NumPy, PyTorch and the sampler.
 
 \subsection{View pool and teacher cache}
 \label{sec:pool}
 
+% FIX: K=20 is the view-pool size, not a k-NN parameter (k-NN uses k=20, a coincidence).
+% Typo: indeces.
 The trained students share the k-NN parameter $K=20$ augmented views per unlabeled image, generated
-once and stored. A sampler permutes 64-image chunks each epoch and draws view indeces at random: two distinct views per image
+once and stored due to compute constraints. A sampler permutes 64-image chunks each epoch and draws view indeces at random: two distinct views per image
 for the directly trained student, one for the distilled student. Because the views are fixed, the teacher's feature for every (image, view)
 pair is computed once and reused by every distilled student run, seed, size and data
 fraction. Its \GpuHTeacherCache~GPU-h are added to the distilled student's compute budget (Table~\ref{tab:budget}).
@@ -184,6 +172,10 @@ spread \SpreadD, $k$-means NMI \NmiValD; Table~\ref{tab:diagnostics}).
 \paragraph{Student family ``ResNet96''.} A basic residual network adapted to
 96-pixel inputs: a $3\times3$ stride-2 stem without max pooling, four stages of two basic
 blocks with widths $w$/$2w$/$4w$/$8w$ and feature maps $48\to24\to12\to6$, global average
+% FIX (from the earlier review, still open): "BatchNorm and ReLU was" -> were; "only the seed
+% differs between the different experiments" is wrong (they differ in method, size, data...):
+% say that for a given seed all students start from the same weights; "according to the
+% literature" -> \citep[Table~1]{fang2021seed}; "I considered" vs "we" elsewhere.
 pooling, and no head. BatchNorm and ReLU was used in all layers. The initialization used Kaiming, and only the
 seed differs between the different experiments. Sizes differ by width only: S ($w=24$, \ParamsS{}M
 parameters, \FeatDimS-d) and L ($w=48$, \ParamsL{}M, \FeatDimL-d). The teacher is still around 3.5$\times$ larger than the largest student. I considered, but rejected depthwise/ConvNeXt-style blocks, which are
@@ -195,6 +187,7 @@ so its features do not depend on batch composition.
 \subsection{Training the students}
 \label{sec:training}
 
+% FIX: "images for C" -> distilled; typo epock; "The directly trained students uses".
 Both students train for $E=100$ epochs with batch 256 (pairs for VICReg, images for C), AdamW
 ($\beta=(0.9,0.999)$, weight decay on the parameters). A linear warmup followed by a per-step
 cosine decay to zero was used, and bf16 autocast and channels-last memory layout. The learning rate,
@@ -216,6 +209,7 @@ Tuning was done only on the S student and scored by $k$-NN ($k=20$, cosine) on t
 using the encoder's pooled feature. Per \citet{shi2022smallssl}, a weakly
 tuned VICReg student would inflate the distilled student's win, so VICReg received the optimizer search and the distilled student inherits it.
 
+% FIX: stray ")" after "16 trials"; "(6 trials per row" below -> per student.
 \paragraph{Optimizer.} One Optuna study using the smaller VICReg student was conducted with the following configuration: 100\% data, 20 epochs, one seed per trial, TPE sampler, median pruner, 16 trials) over learning rate $\in[3\cdot10^{-4},3\cdot10^{-3}]$
 (log), weight decay $\in[0.01,0.2]$ (log) and warmup $\in\{1,2,4\}$ epochs, with the
 default configuration ($10^{-3}$, 0.05, 2) queued as trial 0. The eventual winner was learning rate
@@ -238,6 +232,8 @@ than 2~pp validation $k$-NN. It did not: $\Delta_{\text{val}}=-0.2$~pp
 \subsection{Evaluation}
 \label{sec:eval}
 
+% FIX (section not yet rewritten by you): still uses row letters (row A, D, B-S-100-s0, \CB).
+% The encoder-registry clause is an implementation detail; can go.
 An extraction function, behind an encoder registry that never branches on the row,
 computes frozen features in evaluation mode under \texttt{no\_grad} with a
 deterministic transform: the native 96-pixel image for students (no resize or crop is
@@ -272,6 +268,7 @@ magnitude exceeds the larger of B's and C's seed standard deviations.
 \subsection{Hardware, costs and throughput}
 \label{sec:compute}
 
+% FIX: the last sentence has no full stop; typo measuremntes.
 Every run, including tuning, used a laptop with an NVIDIA RTX 3060 Laptop GPU (6GB VRAM), 16 CPU
 threads, 16GB RAM. Parameters and FLOPs were counted at the encoder's native input (96 px
 students, 224 px teacher). GPU latency is measured at batch 256 in fp32 (10 warm-up and 100
@@ -290,6 +287,8 @@ accuracy unless stated otherwise.
   \centering
   \includegraphics[width=0.48\linewidth]{figures/label_efficiency}\hfill
   \includegraphics[width=0.48\linewidth]{figures/gap_vs_params}
+% FIX: caption still uses letters (D, B, C, \CB). \CB is defined at the top of the file;
+% redefining it as Distilled$-$VICReg fixes every caption that uses it at once.
   \caption{Left: label efficiency (linear SVM; error bars: seed sd; D: draw sd).
     Right: \CB{} gap (linear SVM) vs.\ student parameters, per label fraction and
     unlabeled-data setting (error bars: larger of B's and C's seed sd).}
@@ -299,6 +298,9 @@ accuracy unless stated otherwise.
 \subsection{Q1: Does distillation beat direct training?}
 \label{sec:q1}
 
+% FIX: "This is expected since STL-10 is based on ImageNet" is stronger than the evidence:
+% the overlap is a plausible explanation that EuroSAT supports, not a certainty (difficulty and
+% resolution differ too). "in one experiment" -> at 1% labels (both sizes).
 Yes. Almost every experiment run concluded so, how much is a better question. On STL-10 it is a very clear win for the distilled student. This is expected since STL-10 is based on ImageNet, which the teacher is based on. On EuroSAT, however, the gap is much narrower, and in one experiment the direct training ties or wins compared to distillation. This may indicate that an even more out-of-domain dataset could flip the results. The gap also narrows for the linear SVM classifier with more labeled data. On this budget, the direct trained student also seems to be undertrained, indicating that more training could also narrow the gap. 
 
 \subsection{Q2: How much of the teacher survives compression?}
@@ -306,6 +308,8 @@ Yes. Almost every experiment run concluded so, how much is a better question. On
 
 \input{generated/costs}
 
+% FIX typos: seperability, handfew. "we may not want the teacher to survive" reads oddly; the
+% point is that the student should not simply copy a teacher that is out of its domain.
 Mostly. With all labels, the large distilled student reaches \AccCLFullLinHundred\% linear-SVM
 accuracy against the teacher's \AccDLinHundred\%, and the small one \AccCSFullLinHundred\%. With fewer labels, however, less of the teacher survives. This indicates that the student can inherit some linearly decodable information, but can't grasp the desired class seperability needed with a handfew of examples. ARI and NMI numbers support this. In other domains, such as the EuroSAT images, we may not want the teacher to survive. The student ties with or beats the teacher on a few occasions, adapting to the domain while the teacher stayed frozen. The teacher only seems to be the ceiling inside its domain. 
 
@@ -313,50 +317,12 @@ accuracy against the teacher's \AccDLinHundred\%, and the small one \AccCSFullLi
 \label{sec:q3}
 
 \input{generated/budget}
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% It depends on whether the teacher's pretraining is charged. If it is, direct training is
-% more efficient by roughly three orders of magnitude at every size and data amount: the
-% teacher's estimated pretraining cost dwarfs any student run. If the teacher is a public
-% checkpoint, and therefore a sunk cost, the picture reverses. A distilled run is then both
-% cheaper than a VICReg run, since it processes one view per image instead of two and reads
-% cached teacher features, and more accurate, because of the teacher's targets. No VICReg run
-% we trained, including the 300-epoch runs of Section~\ref{sec:long300}, reaches the accuracy
-% of the cheapest distilled run. The one setting where VICReg yields more accuracy per GPU-hour
-% (small student, half the data) is an accounting artefact: each distilled run is charged the
-% full teacher cache, although ten runs shared it. The detour is worth it when a suitable
-% teacher already exists, and not when one would have to be trained for the purpose.%
-% \footnote{One epoch of one VICReg run recorded an impossible GPU time and was capped at its
-% wall time; the teacher cache was timed on a shared GPU, so its cost is overstated.}
-% <<< END SUGGESTION
 
-It depends on how you count it, especially whether we consider pre-traiing budget into the equation. Because the distilled student uses only 1 versus 2 seperate views like the VICReg, the distilled trains faster and performs better than its competition. 
-
-Under matched student budgets, a C run is also cheaper than a B run: one view per sample
-instead of two makes a C epoch cost roughly 40\% of a B epoch (Table~\ref{tab:budget}). The
-brief's criterion, however, charges C the teacher's published pretraining cost. DINO
-reports 1.16k GPU-h for 300 epochs of ViT-S/16 (Table~8 of~\citep{caron2021dino}); linear
-extrapolation to the released 800-epoch checkpoint gives \GpuHTeacherPretrain~GPU-h, an
-estimate rather than a published number. Charged this way, every C run carries the full pretraining estimate and yields $\approx$0.03 accuracy points per GPU-hour, against
-\AccPerGpuHBLFull--\AccPerGpuHBSHalf{} for B: by this criterion the detour is not worth it,
-by roughly three orders of magnitude, at both sizes and both data amounts. The same
-conclusion holds if accuracy is measured as the gain over row A rather than as raw
-accuracy, since the teacher's cost dominates C's denominator.
-
-The answer changes if the teacher is treated as a sunk cost, as it is for anyone who
-downloads a public checkpoint. Charging C only its distillation run plus the whole teacher
-cache, C delivers more accuracy per GPU-hour than B with 100\% data
-(\AccPerGpuHCSFullNoPretrain{} vs.\ \AccPerGpuHBSFull{} for S, \AccPerGpuHCLFullNoPretrain{}
-vs.\ \AccPerGpuHBLFull{} for L) and for L with 50\% data (\AccPerGpuHCLHalfNoPretrain{}
-vs.\ \AccPerGpuHBLHalf), but not for S with 50\% data (\AccPerGpuHCSHalfNoPretrain{} vs.\
-\AccPerGpuHBSHalf), where the fixed cache cost outweighs the short distillation run. This
-accounting is conservative for C: the cache was computed once and shared by all ten C runs,
-yet each run is charged all of it.
-Two measurement notes apply. First, one epoch of B-L-050-s0 recorded an impossible GPU time
-(a single bad CUDA-event reading, 10.9k~s inside a 59~s epoch); \texttt{mo433 measure} caps
-each epoch's GPU time at its wall time, which affects only that epoch of that run
-(\texttt{gpu\_epochs\_clamped} in \texttt{report/data/runs\_cost.csv}). Second, the teacher-cache
-time was measured while the GPU was shared with other jobs, so it likely overstates the
-cache's cost; it is negligible next to the pretraining estimate either way.
+% FIX: "orders of magnitude cheaper in both compute and data volume": the accounting is
+% compute only, so drop "data volume". Typos: directly training, cheapset, defintely, "if have to".
+% SUGGEST: a footnote with the two measurement notes (one VICReg epoch's impossible GPU time was
+% capped at its wall time; the teacher cache was timed on a shared GPU, so it is overstated).
+It depends on how you count it, especially whether we consider the pre-training budget into the equation. If we consider it, then the directly training is orders of magnitude cheaper in both compute and data volume. Otherwise, it reverses. Because the distilled student uses only 1 versus 2 seperate views like the VICReg, the distilled trains faster (and cheaper) than its competition, apart from being more accurate. Even when the longest-trained the VICReg with the 300-epoch runs of Section~\ref{sec:long300} didn't beat the cheapset distilled configuration. The detour is defintely worth it when a full free teacher checkpoint is available, but not if have to pretrain ourselves.
 
 \subsection{Q4: Do the unsupervised diagnostics agree with the probes?}
 \label{sec:q4}
@@ -371,77 +337,22 @@ cache's cost; it is negligible next to the pretraining estimate either way.
   \label{fig:tsne}
 \end{figure}
 
-Mostly yes. The ordering is preserved (Untrained < VICReg < Distilled < Teacher on all metrics in STL-10), but the spread is different. Since VICReg's variance term pushes each dimension's standard deviation up, compared to a single view matching with teacher in the distilled student, it is expected that the directly trained student presents higher spread. And as we mentioned previously, the out-of-domain order changes with VICReg taking the lead.
+% FIX: "as we mentioned previously" points forward: EuroSAT comes later -> Section~\ref{sec:eurosat}.
+% SUGGEST: one EuroSAT VICReg seed (S, 50% data) lost ~10 pp; its spread and NMI dropped, but it
+% passed the collapse check, so the binary check only catches total collapse and the continuous
+% diagnostics are the more informative signal. Good answer to "do the diagnostics agree".
+Mostly yes. The ordering is preserved (Untrained < VICReg < Distilled < Teacher on all metrics in STL-10), but the spread is different. Since VICReg's variance term pushes each dimension's standard deviation up, compared to a single view matching with teacher in the distilled student, it is expected that the directly trained student presents higher spread. And as we mentioned previously, the out-of-domain order changes with the teacher dropping position, even behind VICReg.
 
 The project brief also asks what changes when two encoders score the same on the SVM but differ in NMI. This is most visible across distinct seeds of the distilled student: the linear-SVM standard deviation of the large distilled student with 100\% data is \AccSdCLFullLinHundred~pp, while its test ARI varies by $\pm$\,0.09, its test NMI by $\pm$\,0.04. K-means uses fixed seeds, so k-means instability is unlikely to be the main source of the variation. Even then, a different geometry can land k-means in a different local optimum, so the variation probably comes from the encoders, but some of it may be amplified by k-means itself. 
-
-% Mostly yes (Table~\ref{tab:diagnostics}). Validation $k$-NN, validation and test $k$-means
-% NMI, and test ARI all order the encoders A $<$ B $<$ C $<$ D at both sizes and both data
-% amounts, matching the probes; e.g.\ test NMI is \NmiTestBSFull{} for B-S and \NmiTestCSFull{}
-% for C-S at 100\% data, against \NmiTestD{} for D. The t-SNE panel
-% (Figure~\ref{fig:tsne}) shows the same progression: no class structure for A, partly
-% separated clusters for B, and compact, mostly separated clusters for C and D.
-
-% The spread statistic disagrees, and for a known reason. B's spread (\SpreadBSHalf{}--\SpreadBLFull)
-% is higher than C's (\SpreadCSFull{}--\SpreadCLHalf) although C is better on every probe.
-% VICReg's variance term directly pushes the per-dimension standard deviation up, whereas
-% C's objective is only to match the teacher's direction after a projector; spread measures
-% how evenly the dimensions are used, not whether classes are separated. It is useful as a
-% collapse alarm (all trained encoders clear the 0.3 threshold, row A does not), not as a
-% quality score.
-
-% The brief asks what changes when two encoders score the same on the SVM but differ in NMI.
-% The clearest instance here is across seeds of C: the linear-SVM standard deviation of C-L
-% with 100\% data is \AccSdCLFullLinHundred~pp, while its test ARI varies by $\pm$\,0.09 and
-% its test NMI by $\pm$\,0.04 (the same holds, less strongly, for C-S). The $k$-means seed is
-% fixed, so this variation comes from the encoders: all seeds make the classes linearly
-% separable to the same degree, but they differ in whether classes form compact, isolated
-% clusters, which is what $k$-means needs. Linear separability and cluster geometry are thus
-% different properties, and the probes alone would hide the second. (Between B encoders of
-% equal SVM accuracy, B-S with 100\% data and B-L with 50\% data at \AccBSFullLinHundred\% and
-% \AccBLHalfLinHundred\%, NMI and ARI agree closely.)
-
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% (Replaces "the out-of-domain order changes with VICReg taking the lead", which is wrong:
-% on EuroSAT Distilled still leads on k-NN/NMI/ARI; the TEACHER drops to last.)
-% On EuroSAT the ordering of the two students is unchanged, but the teacher falls from first
-% to last (Section~\ref{sec:eurosat}).
-%
-% The diagnostics also caught a weak run that the collapse check let through. One EuroSAT
-% VICReg seed (small student, half the data) lost about ten points of probe accuracy, and its
-% spread and NMI dropped with it, yet it stayed above the collapse thresholds. The binary check
-% only detects total collapse; the continuous diagnostics are the more informative signal.
-% <<< END SUGGESTION
 
 \subsection{Q5: Does the gap change with student size?}
 \label{sec:q5}
 
-Only slightly. As the table shows, the error measured in pp is pretty much flat, but in error ratio, the distilled model has a pretty significant change in performance. The hypothesis that states that a directly trained student would eventually beat a distilled one as size and data quantity increase sesm to fail, at leas at this scale. Then again, the VICReg student seems to be undertrained.
+% FIX: "the error measured in pp" -> the gap in pp. "as size and data quantity increase": data was
+% only reduced (ablation), never increased. Typos: sesm, detph.
+Only slightly. As the table shows, the error measured in pp is pretty much flat across the two main sizes and the four of Section~\ref{sec:sizes}. VICReg doesn't come close to beating distillation. However, the distilled model has a significant improvement in performance in terms of error ratio against VICReg. The hypothesis that states that a directly trained student would eventually beat a distilled one as size and data quantity increase sesm to fail, at least at this scale. Then again, the VICReg student seems to be undertrained (Section~\ref{sec:q6}).
 
-That being said, we only tested increasing the width of the network, not detph. Perhaps a deeper network would give more concrete results.
-
-% Only slightly, and B never overtakes C (Figure~\ref{fig:curves} right). With 100\% data, the
-% gap shrinks from S to L at every label fraction and probe, e.g.\ for the linear SVM from
-% \GapSFullLinOne{} to \GapLFullLinOne~pp at 1\% labels (the largest reduction) and from
-% \GapSFullLinHundred{} to \GapLFullLinHundred~pp at 100\% labels. These reductions of
-% 0.3--1.6~pp are small next to gaps of 10--17~pp, rest on two sizes and on two seeds for L,
-% and range from less than one to about four reference standard deviations, so they indicate
-% a direction, not a rate. With
-% 50\% data the direction reverses at low label fractions: the linear-SVM gap at 1\% labels
-% grows from \GapSHalfLinOne{} to \GapLHalfLinOne~pp. Extrapolating a crossover from two
-% points would not be justified; within the tested range (1.57M--6.28M parameters, up to 100k
-% images, 100 epochs) there is none.
-
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% Barely. Across the two main sizes, and the four of Section~\ref{sec:sizes}, the gap in
-% percentage points stays roughly constant, and VICReg never comes close to overtaking
-% distillation. Measured against VICReg's errors, distillation's advantage even grows with
-% size: larger distilled students remove a larger share of the errors the VICReg student makes.
-% Both methods improve with size at about the same rate, so the crossover the brief
-% anticipates, which needs the direct method to scale faster, does not appear within this
-% range. Two caveats apply: we scaled width only, not depth, and at this budget VICReg is
-% undertrained (Section~\ref{sec:q6}).
-% <<< END SUGGESTION
+That being said, we only tested increasing the width of the network, not detph. Perhaps a deeper network (and more training) would give more concrete results.
 
 \subsection{Ablation: unlabeled data and steps}
 \label{sec:ablation}
@@ -461,53 +372,17 @@ instead of all 100k images, for both sizes, same seeds, epochs and probes. Epoch
 stay the same, so the 50\% runs also take half the optimizer steps, so the ablation varies a joint
 data-and-compute budget, not data alone.
 
+% FIX: "The larger networks are also more affected" is not supported: both sizes lose about the
+% same; the extra widening for L shows only at 1% labels, on two seeds. "VICReg target" ->
+% VICReg student. Typos: faver, "wins be".
 Going into this, we expected that a smaller budget should faver distillation, since it has a teacher that supplies a good target for every image, while the other student has to learn from scratch. We confirm that in our findings. As we use less data, distillation wins be an ever-greater margin. This is mostly due to the VICReg target getting worse, while the distilled student better maintains its performance. The larger networks are also more affected by the decrease in data volume. 
-
-% \paragraph{Expectation.} Following the brief's hypothesis, a smaller budget should favour C,
-% since the teacher supplies a dense target for every image while B must learn its
-% representation from the data; the gap should grow at 50\% data.
-
-% \paragraph{Finding.} It does, for both sizes (Table~\ref{tab:ablation},
-% Figure~\ref{fig:ablation}). The gap at 50\% data is larger than at 100\% in every probe and
-% label-fraction cell for both sizes, except for S with the linear SVM at 1\% labels, where it
-% is unchanged (shift \AblShiftSLinOne~pp). With the linear SVM at 100\% labels the gap grows
-% by \AblShiftSLinHundred~pp for S and \AblShiftLLinHundred~pp for L; at 1\% labels by
-% \AblShiftSLinOne{} and \AblShiftLLinOne~pp. The change comes almost entirely from B: halving
-% the budget costs B-S 3.0~pp (\AccBSFullLinHundred\% to \AccBSHalfLinHundred\%) and B-L 3.3~pp
-% (\AccBLFullLinHundred\% to \AccBLHalfLinHundred\%), but C-S only 1.1~pp
-% (\AccCSFullLinHundred\% to \AccCSHalfLinHundred\%) and C-L 1.3~pp (\AccCLFullLinHundred\%
-% to \AccCLHalfLinHundred\%). The gap thus moves in the same direction for both sizes, and the
-% shift is larger for L at low label fractions, an interaction between budget and size that
-% favours distillation for the larger student when the budget is small.
-
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% We expected a smaller budget to favour distillation, since the teacher supplies a good
-% target for every image while the direct student must learn its representation from the data
-% alone. The results confirm this at both sizes: with half the data and steps, distillation
-% wins by a wider margin in almost every setting. The change comes mostly from VICReg, which
-% loses clearly more accuracy than the distilled student, which barely moves. The widening may
-% be stronger for the large student with very few labels, but that rests on two seeds.
-% <<< END SUGGESTION
 
 \subsection{Eval-only multi-scale probe}
 \label{sec:multiscale}
 
-Concatenating pooled stage-3 and stage-4 features (Table~\ref{tab:multiscale}) adds about
-1~pp for B at 100\% labels (B-S \AccBSFullLinHundred\% to \AccMsCatBSFullLinHundred\%, B-L
-\AccBLFullLinHundred\% to \AccMsCatBLFullLinHundred\%) and nothing at 10\% labels; the
-untrained row A gains more. The dimension-matched random projection removes B-S's gain
-(\AccMsProjBSFullLinHundred\%) but only part of B-L's (\AccMsProjBLFullLinHundred\%), so for
-S the gain is extra probe capacity rather than extra information. For C, stage 3 adds nothing
-(\AccCSFullLinHundred\% vs.\ \AccMsCatCSFullLinHundred\%). Intermediate features therefore do
-not change the \CB{} comparison.
-
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% Adding the stage-3 features helps VICReg slightly with all labels and not at all with few,
-% and does nothing for the distilled student. For the small VICReg student the gain vanishes
-% once the concatenated feature is projected back to the original dimension, so it reflects
-% extra probe capacity rather than extra information; for the large one, part of it survives.
-% Either way, intermediate features do not change the comparison between the two students.
-% <<< END SUGGESTION
+% FIX: "on all labels" reads as "at every label fraction", but the gain is only with 100% labels
+% (none at 10%). Typos: dissapears, "features is".
+Adding stage-3 features seems to help VICReg slightly on all labels, but that's as far as it goes. For the distilled student and VICReg with few labels, it doesn't help. Even on the smaller VICReg student, the gain dissapears as soon as the concatenated features is projected back to the original dimension. This means that it only reflects the extra probe capacity instead of actual extra information. For the larger student, it partly survives. In any case, intermediate features do not change the comparison between the students.
 
 \input{generated/l_runs}
 \input{generated/multiscale}
@@ -516,24 +391,8 @@ not change the \CB{} comparison.
 \section{Extra experiments (after the freeze)}
 \label{sec:extras}
 
-% Everything in this section ran AFTER the 20 reported runs, with the frozen settings
-% (tag configs-frozen) plus one declared change each; reported apart from the main study.
-% Numbers below come from \Ext... macros (generated/extras_macros.tex, `mo433 report-extras`).
-\todo{write: short intro to the four extras and why each was run (brief Sec.~9 stretch goals;
-Sec.~4.2 second dataset; caveat on the B objective).}
-% - Brief Sec. 9 lists: second teacher, more student sizes, patch-token distillation, second
-%   (out-of-domain) dataset. We did: second dataset (EuroSAT), more sizes (XS, M), plus two
-%   that target our own open questions: E=300 (Q6) and LeJEPA as a second direct method
-%   (the "supervision source vs. objective" confound).
-% - All untuned: same optimizer, head width, batch, views as the frozen study.
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% After the configurations were frozen and the 20 main runs completed, we ran four extra
-% experiments, reported separately from the main study. Two come from the brief's list of
-% extensions: a second, non-ImageNet dataset and more student sizes. The other two target open
-% questions of the main study: whether VICReg is merely undertrained (longer training) and
-% whether the gap is specific to VICReg (a second direct objective). Each reuses the frozen
-% settings with one declared change, and none was tuned.
-% <<< END SUGGESTION
+% SUGGEST: say they ran after the freeze, untuned, and are reported separately from the main study.
+Beyond the initial 20 runs, we ran four extra experiments using the frozen configurations. This involved a second, out-of-domain dataset (EuroSAT), more student sizes, longer training, and an additional LeJEPA objective student to compare against VICReg and distillation.
 
 \subsection{Second dataset: EuroSAT}
 \label{sec:eurosat}
@@ -543,96 +402,37 @@ Sec.~4.2 second dataset; caveat on the B objective).}
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{figures/extras_label_efficiency}
+% FIX: caption still says "J (LeJEPA)".
   \caption{Label efficiency of the S student on STL-10 (left) and EuroSAT (right), linear
   SVM, mean $\pm$ sd over seeds. J (LeJEPA) is an extra experiment.}
   \label{fig:extras-label-efficiency}
 \end{figure}
 
-\todo{write: EuroSAT setup and results; this answers the brief's Sec.~4.2 (non-ImageNet dataset).}
-% Setup (state explicitly, brief Sec. 4.2 asks which split is used for what):
-% - EuroSAT RGB \citep{helber2019eurosat}, 27k images, 64 px, 10 classes; NOT from ImageNet, so the
-%   teacher never saw it. Brief calls it "a domain where large pretrained models transfer poorly".
-% - No official test split -> stratified 80/20 split (seed 0): 21.6k train / 5.4k test.
-% - Unlabeled pool = all 21.6k train images, labels discarded. Labeled probe set = a
-%   stratified 5k subset of those same 21.6k (mirrors STL-10's 5k; RBF SVM on 21.6k took
-%   >15 min per encoder). Overlap of pool and probe images is standard (brief Sec. 4.2).
-% - Upsampled 64->96 px (bicubic) so students, augmentations and view pool are unchanged
-%   (brief Sec. 4.3, first option). Teacher still sees 224 px.
-% - Same pipeline and frozen settings; only n_images = 21,600 differs. Full study: A, B, C, D,
-%   both sizes, both data fractions; tables in report/eurosat/generated (macros \Eurosat...).
-% - Teacher sanity check passed: val k-NN 92.6%, NMI 0.77.
-% Results (S, linear SVM; L behaves the same, see report/eurosat/generated/main_probes.tex):
-% - Gap C-B collapses from ~15 pp on STL-10 to \ExtGapEurosatCMinusBTen{} pp at 10% labels,
-%   \ExtGapEurosatCMinusBHundred{} at 100%, and is inconclusive at 1%
-%   (\ExtGapEurosatCMinusBOne{}, within the spread).
-% - The teacher D is no longer a ceiling: at 1% labels D (\ExtAccEurosatDOne{}%) is BELOW B
-%   and C; at 100% C (\ExtAccEurosatCHundred{}) matches D (\ExtAccEurosatDHundred{}).
-%   Compare STL-10 where D is far above everyone (\ExtAccStlDTen{} at 10%).
-% - Interpretation hooks: (i) part of the STL-10 gap is plausibly the ImageNet overlap
-%   (teacher saw those images) -> confirms the bias the brief warns about; (ii) in-domain
-%   self-supervised training (B) is much more competitive out of domain; (iii) distillation
-%   still wins at >=10% labels even though the teacher is out of domain - the student
-%   adapts to EuroSAT through the views it trains on.
-% - Caveat: EuroSAT is an easier task (A = random init already gets ~56% at 100% labels vs
-%   35% on STL-10), so ceilings compress all gaps.
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% \paragraph{Setup.} EuroSAT RGB~\citep{helber2019eurosat} has 27k satellite images of 10
-% land-use classes. It is not drawn from ImageNet, so the teacher has never seen it. Lacking an
-% official test split, we use a stratified 80/20 split. All training images, without labels,
-% form the unlabeled set, and a stratified 5k subset of them is the labeled set for the probes,
-% matching STL-10. Images are upsampled from 64 to 96 pixels, so students, augmentations and
-% the view pool are unchanged, and the full study is rerun with the frozen settings. The
-% teacher passed its sanity check on this data.
-%
-% \paragraph{Results.} Out of domain, distillation's advantage shrinks from more than ten
-% points to a few, and disappears with the fewest labels, where VICReg ties or wins. The
-% teacher is no longer a ceiling: with few labels it falls below both students, and with all
-% labels the distilled student matches it. Two readings fit this. Part of the large STL-10 gap
-% likely comes from the teacher's exposure to ImageNet, as the brief warns; and a student
-% trained on in-domain images adapts to the domain in a way a frozen teacher cannot, which is
-% also why distillation still helps once enough labels are available. The comparison is not
-% clean: EuroSAT is an easier task, where even the untrained student does well and all methods
-% crowd near the ceiling, and its low resolution means the teacher sees heavily upsampled
-% images. One VICReg run (small student, half the data) partly failed, which inflates the gap
-% in that setting; the large student shows the same trend without it.
-% <<< END SUGGESTION
+% FIX: "a stratified 5% subset" is wrong: it is a 5k (5,000-image) subset of the 21.6k training
+% images, matching STL-10's 5k labeled set. "the teacher loses some advantage" is a result, not
+% setup. Add: the full study was rerun with the frozen settings and the teacher passed its sanity
+% check. Typos: iamges, startified, "teacher teacher", proves, "Since, this".
+\paragraph{Setup.} EuroSAT RGB~\citep{helber2019eurosat} is comprised of 27k satellite iamges of 10 classes, each a different use of land. Since, this is very distinct from the ImageNet images, the teacher teacher loses some advantage. Since the dataset has no official train/test split, we used a startified 80\% for training, and the remaining 20\% for test. The unlabeled set was comprised of the entire training set(labels removed), with a stratified 5\% subset for the proves. To match the input, the 64$\times$64 images had to be upscaled to 96$\times$96 pixels. 
+
+% SUGGEST: add (i) VICReg ties/wins at 1% labels; (ii) part of the STL-10 gap likely comes from
+% the teacher's ImageNet exposure (links to Confounds); (iii) caveats: the teacher sees heavily
+% upsampled 64 px images; one VICReg run (S, 50% data) partly failed, inflating that cell.
+% Typos: "as that", comapred.
+\paragraph{Results.} Out of the teacher's domain, distillation's advantage against VICReg shrinks significantly, and so does the teacher's. In this setup, both the distilled and VICReg student were able to match or even outperform the teacher with few labels. With all labels, distilled student is still able to match teacher performance. One caveat of these results as that EuroSAT is an easier task, as even the untrained student was able to get better performance comapred with the STL-10 dataset.
 
 \subsection{A second direct method: LeJEPA}
 \label{sec:lejepa}
 
-\todo{write: LeJEPA as row J; does the gap belong to VICReg or to direct training?}
-% - Brief, "Caveat on the comparison": C vs. B differs in supervision source AND objective;
-%   asks to "discuss how a stronger or weaker B objective would move the gap". Row J tests it.
-% - LeJEPA \citep{balestriero2025lejepa}: SIGReg (random 1-D projections pushed to N(0,1) by
-%   the Epps-Pulley test) + prediction of each view's embedding from the mean of the views;
-%   one hyperparameter lambda, claimed to need no heuristics (no EMA, no stop-grad).
-% - Setup: reference defaults untuned (lambda = 0.05, 256 slices, projector MLP 2048-2048-128),
-%   same 2 pool views per image as B, frozen optimizer (tuned for VICReg!), S student,
-%   seeds 0-1, E = 100, both datasets. So J vs. B changes ONLY the objective.
-% - Results EuroSAT: J is BELOW VICReg at every label fraction (\ExtGapEurosatJMinusBTen{} pp
-%   at 10%), and C beats J by \ExtGapEurosatCMinusJTen{} pp.
-% - Results STL-10: J is slightly BELOW VICReg too (\ExtGapStlJMinusBTen{} pp at 10% labels,
-%   \ExtGapStlJMinusBHundred{} at 100%, \ExtGapStlJMinusBOne{} at 1% = within spread), and C beats J
-%   by \ExtGapStlCMinusJTen{} pp. Same picture on both datasets: J <= B < C.
-% - Caveats to state: optimizer/weight decay were tuned for VICReg (LeJEPA's reference
-%   recipe uses wd 5e-4 for ResNets vs. our 0.11) and only 2 views (the paper uses 2 global
-%   + 6 local crops), 2 seeds, short budget -> this is "LeJEPA under our frozen protocol",
-%   not LeJEPA at its best. Conclusion hook: swapping the direct objective did not close
-%   the gap; within this budget the gap is not a VICReg artefact.
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% Distillation and VICReg differ both in where the training signal comes from and in the
-% objective, and the brief asks how a stronger or weaker direct objective would move the gap.
-% We therefore replace VICReg with LeJEPA~\citep{balestriero2025lejepa}, which regularizes the
-% embedding towards an isotropic Gaussian and predicts each view's embedding from the others.
-% Views, optimizer and budget are identical to the VICReg runs, so only the objective changes.
-%
-% LeJEPA did not beat VICReg on either dataset; it was slightly worse throughout. On STL-10,
-% swapping the direct objective barely moves the gap, so the gap is not an artefact of choosing
-% VICReg. On EuroSAT, where the gap is small, the same swap roughly doubles it: out of domain,
-% the choice of direct method matters about as much as distillation itself. LeJEPA ran with its
-% reference defaults under an optimizer tuned for VICReg, with two views instead of the paper's
-% multi-crop and two seeds, so this is LeJEPA under our protocol, not at its best.
-% <<< END SUGGESTION
+% FIX: "our hypothesis that distilled always beats trained from scratch": "always" contradicts
+% EuroSAT at 1% labels, and the brief's hypothesis is a crossover, not "always". Say LeJEPA tests
+% whether the gap is specific to VICReg. SUGGEST: setup in one line (reference defaults, 2 views
+% instead of the paper's multi-crop, S student, 2 seeds).
+To explore more training methods, we copied the VICReg student configuration and swapped the objective with LeJEPA's~\citep{balestriero2025lejepa}, which regularizes the embedding towards an isotropic Gaussian, to directly train a student. This not only gives on opportunity to compare VICReg against LeJEPA, but also increases the robustness of our hypothesis that distilled always beats trained from scratch.
+
+% FIX: "on either dataset on either datset" (duplicate); typos confidance, comparitvely.
+% SUGGEST: the EuroSAT point worth making: there, swapping VICReg for LeJEPA roughly doubles the
+% gap, so out of domain the choice of direct method matters about as much as distillation.
+LeJEPA did not beat VICReg on either dataset on either datset, and was slightly worse overall. The gap between distilled and directly trained barely change on STL-10, which gives us more confidance that distillation still beats a comparable generic directly trained student. In EuroSAT, LeJEPA performed comparitvely worse than in STL-10. This should be taken with a grain of salt though, as LeJEPA was trained on an optimizer tuned for VICReg, so it is not its best performance.
 
 \subsection{Longer training ($E=300$)}
 \label{sec:long300}
@@ -647,29 +447,9 @@ Sec.~4.2 second dataset; caveat on the B objective).}
   \label{fig:extras-long300-curves}
 \end{figure}
 
-\todo{write: what tripling the epochs does; turns Q6 from an argument into a measurement.}
-% - Change: E = 300 instead of 100 (cosine schedule stretched over 300 epochs), S, B and C,
-%   seeds 0-1; compared against the main runs with the same seeds.
-% - B gains more than C: at 10% labels B \ExtAccLongBEHundredTen{} -> \ExtAccLongBEThreeHundredTen{},
-%   C \ExtAccLongCEHundredTen{} -> \ExtAccLongCEThreeHundredTen{}.
-% - Gap shrinks but stays large: \ExtGapLongEHundredTen{} -> \ExtGapLongEThreeHundredTen{} pp
-%   (10% labels), \ExtGapLongEHundredHundred{} -> \ExtGapLongEThreeHundredHundred{} pp (100%).
-% - So the brief's hypothesis direction holds (B catches up with budget) but slowly: ~1.4 pp
-%   of gap per extra 200 epochs at 10% labels -> no crossover in any realistic budget here.
-% - Curves: B is still rising at epoch 300, C has plateaued since ~150 -> B undertrained
-%   even at 3x. Note curves at E=100 vs E=300 are not the same schedule (cosine), so
-%   compare end points, not epoch-by-epoch.
-% - Cost: B-S at 300 epochs ~3.8 GPU-h per run.
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% Tripling the training length helps VICReg about twice as much as distillation, so the gap
-% narrows at every label fraction, but slowly: it remains far larger than the seed spread. The
-% training curves show why. The distilled student has largely plateaued, while VICReg is still
-% improving at the end. Distillation appears limited by the student's capacity, which larger
-% students relieve (Section~\ref{sec:sizes}), and VICReg by the training budget. At this rate a
-% crossover, if any, would need an order of magnitude more training than we could afford. The
-% cosine schedule stretches with the run length, so only end points are comparable, not the
-% curves epoch by epoch; the experiment covers the small student and two seeds.
-% <<< END SUGGESTION
+% FIX typos: tripple, epocks, compareable, stretchs, "important to note, that".
+% SUGGEST: mention 2 seeds, S only.
+Extended training on the small student showed us that we could have squeezed more performance out of VICReg. With tripple the epocks, VICReg improved double the amount that the distilled student did. At this point, the distilled student's training curve has pretty much plateaued, while VICReg is still improving. This indicates that the distilled student learns faster, but is limited by its capacity (which larger students relieve - Section~\ref{sec:sizes}), and VICReg is limited by the training budget. For VICReg to surpass distillation, we would need much more training than a laptop GPU could offer. It is important to note, that only the endpoints are compareable with the original training because the cosine schedule stretchs as the run length grows. 
 
 \subsection{More student sizes}
 \label{sec:sizes}
@@ -680,62 +460,33 @@ Sec.~4.2 second dataset; caveat on the B objective).}
   \centering
   \includegraphics[width=\linewidth]{figures/extras_sizes}
   \caption{Four student sizes on STL-10 (XS and M are extra experiments). Left: linear-SVM
-  accuracy at 10\% labels against parameters. Right: gap C$-$B against parameters for three
+  accuracy at 10\% labels against parameters. Right: gap distilled$-$VICReg against parameters for three
   label fractions; error bars are the larger of the two seed sds.}
   \label{fig:extras-sizes}
 \end{figure}
 
-\todo{write: four-size gap vs. parameters (brief Sec.~9: accuracy against parameter count; Q5).}
-% - XS (w=12, \ExtParamsXS{}M) and M (w=34, \ExtParamsM{}M) by the same single width rule as
-%   S/L; B and C, seeds 0-1, 100% data, E = 100.
-% - 16x parameter range: the gap at 10% labels is flat at ~14.5-15 pp
-%   (XS \ExtGapSizeXSTen{}, S \ExtGapSizeSTen{}, M \ExtGapSizeMTen{}, L \ExtGapSizeLTen{}).
-%   At 100% labels it narrows slightly from XS to M and then stays flat (\ExtGapSizeXSHundred{} -> \ExtGapSizeLHundred{}).
-% - Both rows gain about equally from size (left panel: parallel lines) -> no sign of B
-%   overtaking C; the crossover predicted by the brief is not within 0.4-6.3M params.
-% - Even the XS student distilled (\ExtAccSizeCXSTen{}) beats the L student trained with
-%   VICReg (\ExtAccSizeBLTen{}) at 10% labels: 16x fewer parameters.
-% - Teacher stays clearly larger than the largest variant (21.7M vs 6.3M).
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% Two more sizes, XS and M, built with the same width rule, extend the range to sixteen-fold in
-% parameters. Both methods improve steadily with size at about the same rate, so the gap stays
-% almost constant, narrowing only slightly with all labels. Distillation is far enough ahead
-% that even the smallest distilled student beats the largest VICReg student with few labels,
-% at a sixteenth of the parameters. Within this range there is no sign of the crossover the
-% brief anticipates.
-% <<< END SUGGESTION
+% FIX: "improved with size at the same rate as the other sizes" -> both methods improve with size
+% at about the same rate; "no significant distance in the gap" -> the gap stays almost constant;
+% "ahead the most expensive" -> ahead of the largest.
+Two more sizes (XS and M) were built with the same width rule and extend the range to sixteen-fold in parameter count. The methods improved with size at the same rate as the other sizes, so there is no significant distance in the gap between distilled and VICReg students on few labels, with a slight reduction when all labels were used. Even the smallest distillation is healthily ahead the most expensive VICReg student with few labels, with absolutely no sign of a crossover at this scale.
 
 % =====================================================================================
 \section{Difficulties and solutions}
 \label{sec:difficulties}
 
-The main practical constraint was the hardware. All training ran on a single 6 GB laptop GPU, which could not hold two training jobs at once, and the laptop's system memory was also limited. Its out-of-memory killer terminated the work session twice. We therefore ran every job sequentially as a memory-capped background service, with checkpoints so any run could resume after an interruption. Throughput was the second difficulty. Generating augmented views on the fly made data loading the bottleneck, so we had to precompute a pool of 20 augmented views per image and read them in shuffled chunks. A control run showed that on-the-fly augmentation was only barely better in validation k-NN, so we kept the pool. For the distilled student, running the ViT-S/16 teacher at every step would have exploded the cost. Instead we cached its features once per pool view and checked the cache against live teacher outputs. Fairness under a limited tuning budget was a methodological difficulty. We ran a single Optuna study, with median pruning of bad trials, on VICReg only and froze its winner for every other student, so the comparison does not favour distillation.
+The main practical constraint was the hardware. All training ran on a single 6 GB laptop GPU, which could not hold two training jobs at once, and the laptop's system memory was also limited. Its out-of-memory killer terminated our training a few times. We therefore ran every job sequentially as a memory-capped background service, with checkpoints so any run could resume after a failure. Throughput was also a difficulty. Generating augmented views on the fly made data loading unviable, so we had to precompute a pool of 20 augmented views per image and read them in shuffled chunks. A control run showed that there was barely a performance loss in validation k-NN, so we kept the pooled views. For the distilled student, running the ViT-S/16 teacher at every step would have exploded the cost. Instead, we cached its features once per pool view and checked the cache against live teacher outputs. Fairness under a limited tuning budget was another difficulty in methodology. We ran a single Optuna study, with median pruning of bad trials, on VICReg only and froze its winner for every other student, so the comparison does not favour distillation, which was the expected winner from the hypothesis.
 
-The second dataset brought its own problems. EuroSAT has no official test split and its images are 64×64. We built a stratified 80/20 split and upsampled the images to 96×96, so the students and augmentations stayed unchanged. Fitting the RBF SVM on all 21.6k training images took more than 15 minutes per encoder. We therefore probed on a stratified 5,000-image labeled subset, which also mirrors STL-10's 5k labeled set and keeps the label fractions comparable between the two datasets.
+The second dataset brought its own problems. EuroSAT has no official test split and its images are 64×64. We built a stratified 80/20 split and upsampled the images to 96×96, so the students and augmentations stayed fixed. Fitting the RBF SVM on all 21.6k training images took more than 15 minutes per encoder. We therefore probed on a stratified 5,000-image labeled subset, which keeps the label fractions comparable between the two datasets.
 
-\section{Use of generative AI tools}
-\label{sec:genai}
-
-\todo{required by the course: state which code parts or steps used generative AI tools.
-The course allows AI for code (documented here) but forbids it for writing the report,
-except for revising the text.}
-% Points to cover (be specific and honest):
-% - Which code: e.g. the mo433 package (pipeline, training loops, probes, report generator,
-%   extras, tests) was written with an AI coding assistant (Claude Code) under your
-%   direction; you designed/decided X, reviewed Y, verified by tests and sanity checks.
-% - Which decisions were yours (design, protocol, what to run) vs. implemented by the tool.
-% - How correctness was checked: unit tests (~200), teacher sanity check, collapse checks,
-%   comparing against reference implementations (lightly VICReg loss, torchvision loader).
-% - Text: say whether AI was used only to revise your text, and for which sections
-%   (e.g. if an AI draft was used as a starting point and then rewritten, say so).
-
-% =====================================================================================
 \section{Discussion}
 \label{sec:discussion}
 
 \subsection{Q6: Undertrained at this scale}
 \label{sec:q6}
 
+% FIX (not yet rewritten by you): this paragraph is the old draft (row letters B/C) and predates
+% E=300. Rewrite it around Section~\ref{sec:long300}: VICReg gains about twice as much from 3x
+% epochs, the gap narrows slowly and stays large.
 All runs are short by self-supervised standards (100 epochs on 100k or 50k images, batch
 256), and the results should be read as properties of this budget, not of the methods at
 convergence. Two committed measurements suggest that B is further from convergence than C.
@@ -747,41 +498,30 @@ times as much accuracy as C (Section~\ref{sec:ablation}). Both point the same wa
 longer training or more data, B would likely gain more than C, and the gap would shrink.
 Whether it would close cannot be inferred from these runs.
 \todo{update: the $E=300$ extra (Section~\ref{sec:long300}) now measures this.}
-% - B gains ~2.6 pp, C ~1.3 pp at 10% labels; gap \ExtGapLongEHundredTen{} -> \ExtGapLongEThreeHundredTen{}.
-% - So "B would gain more" is confirmed; "whether it closes": not at 3x budget. The size of the gap, especially
+The size of the gap, especially
 at 100\% labels, should be interpreted with this, and with the teacher's exposure to
 ImageNet (below), in mind.
 
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% (Q6, replaces the paragraph above.)
-% All runs are short by self-supervised standards, so the results describe this budget, not
-% the methods at convergence. Three observations show that VICReg is further from convergence
-% than distillation: it improved much more between the short tuning runs and the reported
-% runs, it loses about three times as much when the budget is halved
-% (Section~\ref{sec:ablation}), and it gains about twice as much when the budget is tripled
-% (Section~\ref{sec:long300}). Longer training therefore narrows the gap, as the brief
-% expects, but slowly. At three times the budget the gap remains large, and whether it would
-% ever close cannot be inferred from these runs.
-% <<< END SUGGESTION
+% FIX typo: "important to not that".
+Since we previously observed that there was some undertraining, it is important to not that these results are limited to this compute budget, not the overall methods at their best. 
 
 \subsection{Confounds}
 \label{sec:confounds}
 
 \begin{itemize}
+% FIX (not yet rewritten by you): bullets still use row letters; the two red TODOs below are
+% open. "Fixed views ... measured in Section~\ref{sec:limitations}" now points to the wrong
+% place: the fixed-view control is in Section~\ref{sec:tuning}.
   \item \textbf{Supervision source and objective.} C and B differ both in where the signal
     comes from (a frozen teacher vs.\ the student's own views) and in the objective (cosine
     distillation of a DINO-trained teacher vs.\ VICReg), so the gap cannot be attributed to
     distillation alone. A DINO-trained convnet in B would remove the second difference; we
     did not run it because DINO is costlier and more collapse-prone at small budgets.
     \todo{add: LeJEPA (row J, Section~\ref{sec:lejepa}) as a second direct objective.}
-    % J vs. B changes only the objective; J did not beat VICReg -> the gap is not specific
-    % to VICReg (within this frozen protocol). It still differs from C in supervision source.
   \item \textbf{ImageNet overlap.} STL-10 images come from ImageNet, which the teacher saw
     (without labels) during pretraining. This favours C and D and may explain part of the
     teacher's \AccDLinHundred\% and of C's margin; we discuss it but did not run a second,
     non-ImageNet dataset. \todo{WRONG NOW: EuroSAT was run (Section~\ref{sec:eurosat}); rewrite.}
-    % On EuroSAT (never seen by the teacher) the gap drops to ~2.5 pp and D stops being a
-    % ceiling -> evidence that the overlap inflates C and D on STL-10.
   \item \textbf{Optimizer tuned on B.} The optimizer was tuned on B and copied to C, which
     biases the comparison toward B; a C win is therefore conservative in this respect.
   \item \textbf{Fixed views.} B and C train on the same 20 views per image; the cost of this
@@ -789,97 +529,31 @@ ImageNet (below), in mind.
   \item \textbf{Data and steps.} The ablation halves data and optimizer steps together
     (Section~\ref{sec:ablation}).
 \end{itemize}
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% (Updated versions of the two outdated bullets above.)
-% \item \textbf{Supervision source and objective.} ... A second direct objective (LeJEPA,
-%   Section~\ref{sec:lejepa}) did not narrow the gap, so it is not specific to VICReg. The two
-%   students still differ in supervision source; a DINO-trained convnet would be the cleaner
-%   control.
-% \item \textbf{ImageNet overlap.} STL-10 is drawn from ImageNet, which the teacher saw without
-%   labels. On EuroSAT, which it never saw, the gap shrinks to a few points and the teacher
-%   stops being a ceiling (Section~\ref{sec:eurosat}), so the overlap likely inflates both the
-%   teacher and the distilled student on STL-10. Differences in difficulty and resolution
-%   between the datasets prevent attributing the whole drop to the overlap.
-% <<< END SUGGESTION
 
 \subsection{Limitations}
 \label{sec:limitations}
 
-\paragraph{Tuning proxy and search edges.} The Optuna study scored 20-epoch trials as a
-proxy for 100-epoch runs, and the head grid used the same proxy. The winning learning rate
-($2.86\cdot10^{-3}$) lies near the $3\cdot10^{-3}$ upper bound, and the best LARS
-configuration lies at the edge of its grid, so B might gain from a wider search. Given gaps
-of 10--20~pp, we do not expect this to change the sign of the result, but it may affect its
-size. The LARS check is one seed per configuration.
+% FIX: "no significant change in student size" is wrong: four sizes over a 16x range.
+% SUGGEST: restore the limitations that were dropped: the tuning proxy (20-epoch trials, best LR at
+% the edge of the search space), fixed views (one-pair control), L and all extras on 2 seeds,
+% extras untuned, the collapse check catching only total collapse.
+Since we covered more than one student objective, and dataset, the main limitations are that there were no extra teachers analyzed, no significant change in student size and limited training runs. This is mostly due to time and compute constraints. Without them, we could do more optuna studies, compare more teachers, use on-the-fly augmentation, compare more seeds and run training until convergence.  
 
-\paragraph{Fixed views.} B draws 2 of 20 views per image per epoch, from $\binom{20}{2}=190$
-possible pairs, and sees each view about 10 times over 100 epochs; C sees each view about 5
-times, and its teacher targets cover only those 20 views. Fixed views can only weaken B
-relative to fresh augmentation: EMC$^2$ reports $K=10$ pre-generated views visibly below
-on-the-fly augmentation on STL-10 \todo{add a verified citation for EMC$^2$; it is not among
-the verified entries of issue \#4}, and we know of no VICReg-specific study. Our
-matched pair (B, S, 100\% data, seed 0) measured on-the-fly minus pool at
-$-0.2$~pp validation $k$-NN and $+0.2$~pp test $k$-NN (100\% labels, draw 0); this is one
-seed and one size. The consequence is that C's margin may be inflated by up to about
-0.2~pp in that configuration, negligible next to the measured gaps; we do not extrapolate
-it to L or to 50\% data. The 2~pp switch rule was fixed before the pair ran, and it did not
-fire.
-
-\paragraph{Spread and seeds.} L has two seeds, so its standard deviation is a poor estimate;
-the individual runs (Table~\ref{tab:l-runs}) agree within 1.2~pp, far below the gaps. Runs are
-not bitwise deterministic.
-
-\paragraph{Scope.} One dataset, one teacher, one direct method, two student sizes and two
-data settings. The absence of a crossover holds only within this range.
-\todo{update scope: extras add a second dataset, a second direct method (J), four sizes and $E=300$.}
-% Still one teacher; extras have 2 seeds; J untuned under a VICReg-tuned optimizer.
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% \paragraph{Scope.} One teacher throughout. The main study covers one dataset, one direct
-% method, two student sizes and two data amounts; the extras add a second dataset, a second
-% direct method, two sizes and a longer schedule, but with two seeds each and no tuning. The
-% absence of a crossover holds only within this range.
-%
-% \paragraph{Collapse check.} The check detects total collapse only; a partly failed run passed
-% it (Section~\ref{sec:q4}). The continuous diagnostics should be read alongside it.
-% <<< END SUGGESTION
-
-\subsection{Departures from the brief and the plan}
-\label{sec:departures}
-
-\begin{enumerate}
-  \item \textbf{Label-draw variance.} The brief asks to include the label-subset draws in
-    the spread. We average the three draws within each seed before taking the seed standard
-    deviation, so that the spread compares training runs, which is what ``beyond the
-    seed-to-seed spread'' refers to; the draw variance is still visible in D's $\pm$.
-  \item \textbf{Ablation last.} The brief suggests running the cheaper reduced-data settings
-    first. We ran the main comparison first so that any schedule slip would cut the ablation
-    and never the main result. In the event nothing was cut.
-  \item \textbf{LARS check on the laptop.} The plan placed the LARS check on Kaggle; it ran on
-    the same laptop as everything else, which only makes its GPU time more comparable.
-  \item \textbf{$k$-NN probes before SVM selection.} The plan froze the SVM settings before
-    any C encoder was probed. The (untuned) $k$-NN probes of the C encoders ran before the
-    selection. This leaks nothing, since $k$-NN has no hyperparameters to select and the
-    selection sees only B-S-100-s0's training features; those rows were nevertheless deleted
-    and regenerated after the selection, with identical results.
-\end{enumerate}
-% \todo-candidate: add a departure item for the extras: run after the freeze, reported apart;
-% EuroSAT has no official test split (own stratified 80/20) and is probed on a 5k labeled
-% subset of the training split; LeJEPA uses 2 views, not the paper's multi-crop.
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% \item \textbf{Extra experiments after the freeze.} Four extras ran after the configurations
-%   were frozen and are reported separately. EuroSAT has no official test split, so we built a
-%   stratified 80/20 split, and its probes use a 5k labeled subset of the training split.
-%   LeJEPA used two views instead of the paper's multi-crop.
-% <<< END SUGGESTION
-All 20 runs used the training configuration later tagged \texttt{configs-frozen}; it did
-not change between the runs and the tag (only the SVM settings were filled in afterwards,
-as planned).
+\section{Use of generative AI tools}
+\label{sec:genai}
 
 % =====================================================================================
+
+% FIX: the course requires naming which code parts or steps used AI. One line is thin: list the
+% parts (pipeline, training loops, probes, report generator, extras, tests), what you decided
+% yourself, and how correctness was checked (unit tests, sanity checks). Also state that AI drafts
+% were used as starting points for some report sections that you then rewrote, and which ones.
+AI tools were useful in coding the training scripts at the student's (the author, not the model) discretion, as well as organizing the repository and revising the final report. 
 \clearpage
 \section{Conclusion}
 \label{sec:conclusion}
 
+% FIX: this is the old conclusion paragraph; your new one is below. Delete this one.
 At the scale a single laptop GPU allows, distilling a frozen DINO ViT-S/16 into a small
 ResNet beats training it with VICReg by 10--20~pp at every label fraction, for both student
 sizes and both data amounts, and the advantage grows when unlabeled data and steps are
@@ -890,56 +564,22 @@ charged, direct training is about three orders of magnitude more efficient per G
 with a public checkpoint treated as free, distillation gives more accuracy per GPU-hour in
 three of four settings. These conclusions hold for VICReg as the direct method, on an
 ImageNet-derived dataset, and at a budget at which B is likely undertrained.
-\todo{update the conclusion with the extras.}
-% - Out of domain (EuroSAT) the advantage shrinks to ~2.5 pp and vanishes at 1% labels.
-% - LeJEPA does not do better than VICReg -> not an artefact of the direct method chosen.
-% - 3x epochs shrink the gap by only ~1.4 pp; four sizes (0.4-6.3M) keep it flat.
-% - So: the crossover, if any, lies outside our range on STL-10, and much closer out of domain.
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% At the scale a single laptop GPU allows, distilling a frozen DINO ViT-S/16 into a small
-% ResNet beats training it directly by a wide margin on STL-10, at every label fraction,
-% student size and data amount, and the margin widens when data and steps are reduced. It
-% barely changes across a sixteen-fold range of student sizes, shrinks only slowly with three
-% times the training, and does not depend on VICReg: a second direct objective does no better.
-% Out of domain the picture changes. On EuroSAT the advantage shrinks to a few points and
-% vanishes with the fewest labels, and the teacher stops being a ceiling. Whether the detour is
-% worth it depends on the accounting: with the teacher's pretraining charged, direct training
-% is far more efficient; with a public checkpoint, distillation is both cheaper and more
-% accurate. The crossover the brief anticipates lies, if anywhere, beyond our range on STL-10,
-% and likely much closer on data the teacher has never seen.
-% <<< END SUGGESTION
+
+% FIX typos: significantlly, definetely; "at few levels" -> with few labels; "beats training
+% by far" -> beats direct training.
+At our laptop GPU scale, distilling a frozen DINO ViT-S/16 into a small ResNet almost always beats training by far, especially if the target dataset is in the same domain as the teacher's pretraining. This holds true across different student sizes, data volume, training length and even the training objective, as LeJEPA does no better than VICReg. On a different domain, however, the advantage shrinks significantlly, especially at few levels. If a pretrained large model checkpoint is available to you, it is definetely worth it to distill rather than train from scratch. If you would have to do the pretraining yourself though, the detour is probably not worth it.
 
 \paragraph{Reproducibility.} The repository regenerates every table and figure from the
-frozen configurations with \texttt{uv run mo433 all}; the 20 final checkpoints are
+frozen configurations with the command \texttt{uv run mo433 all}; the 20 final checkpoints are
 published as a release. \todo{link the repository and the checkpoint release}
 
 \subsection{Suggestions for improvement}
 \label{sec:suggestions}
 
-\todo{write: suggestions for improving the study (course format requires them on the final
-page).}
-% Candidates (updated after the extras; EuroSAT, E=300 and more sizes are now DONE):
-% - A DINO-trained convnet as row B (removes the objective confound entirely).
-% - Tune J (LeJEPA) / B per method with equal budget (e.g. wd, multi-crop) instead of
-%   reusing the VICReg optimizer; LeJEPA with its 2 global + 6 local crops.
-% - A second teacher from the other family (MAE ViT-B; brief Sec. 9), and a teacher
-%   pretrained in-domain (e.g. on satellite imagery) for EuroSAT.
-% - Distil patch tokens / intermediate feature maps (brief Sec. 9).
-% - Longer training beyond 300 epochs and on EuroSAT too, to locate a crossover.
-% - Supervised ImageNet-pretrained student as a reference row (brief Sec. 5, optional).
-% - More seeds (L and extras have 2); on-the-fly augmentation for B beyond the one pair.
-% - A wider LR / LARS search (Sec. limitations).
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% A DINO-trained convnet as the direct method would remove the remaining difference in
-% objective. Tuning each direct method on its own, instead of reusing VICReg's optimizer, and
-% running LeJEPA with multi-crop would test whether a stronger baseline narrows the gap,
-% especially out of domain. A second teacher (e.g.\ MAE) and a teacher pretrained on satellite
-% imagery would separate the teacher's training method from its domain. Distilling patch tokens
-% or intermediate features could transfer more of the teacher's spatial structure. Longer
-% training, also on EuroSAT, would show whether the gap closes at all. More seeds for the large
-% student and the extras, a wider learning-rate search and further on-the-fly augmentation
-% controls would tighten the error bars.
-% <<< END SUGGESTION
+% FIX typos: convenet, ouf-of-domain; "could also test as stronger baseline narrowing the gap
+% between distillation" is garbled. SUGGEST adding: patch-token distillation, longer training (also
+% on EuroSAT), more seeds.
+Introducing a DINO-trained convenet as another direct method would further clarify the difference in objective against the teacher. Optimizing as much as we can each direct method (instead of relying on VICReg's configuration for all students), and running LeJEPA with multi-crop could also test as stronger baseline narrowing the gap between distillation, especially in the ouf-of-domain EuroSAT dataset. A second teacher such as MAE and a teacher pretrained on EuroSAT's domain would help understand the impact of training method versus domain. 
 
 % =====================================================================================
 {\small
