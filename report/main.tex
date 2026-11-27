@@ -20,7 +20,7 @@
 
 % Unresolved points: grep for \todo before submission.
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
-\newcommand{\CB}{C$-$B}
+\newcommand{\CB}{Distilled$-$VICReg}
 
 \begin{document}
 
@@ -74,6 +74,65 @@ We compare the distillation versus direct training in a controlled setting: one 
 % =====================================================================================
 \section{Related work}
 \label{sec:related}
+
+% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
+% \paragraph{Self-supervised representation learning.}
+% Most self-supervised methods learn by making the representations of two views of the same
+% image agree, and differ mainly in how they prevent the trivial solution of mapping every
+% image to the same point. SimCLR~\citep{chen2020simclr} pushes other images in the batch away,
+% which works best with large batches and long schedules. BYOL~\citep{grill2020byol} drops
+% negatives and instead predicts a slowly updated copy of the network, and
+% DINO~\citep{caron2021dino} turns this into self-distillation, producing ViT features that are
+% strong nearest-neighbour classifiers. VICReg~\citep{bardes2022vicreg} prevents collapse
+% explicitly, by keeping every embedding dimension variable and decorrelated, and
+% LeJEPA~\citep{balestriero2025lejepa} replaces such heuristics with a single regularizer that
+% pushes the embedding towards an isotropic Gaussian. Masked methods take a different route:
+% I-JEPA~\citep{assran2023ijepa} predicts the representations of hidden image regions, and
+% MAE~\citep{he2022mae} reconstructs hidden pixels, which pays off mainly after fine-tuning
+% rather than with frozen probes. The trend across this line of work is towards large
+% encoders, long schedules and big datasets; how these objectives behave on a small convnet
+% with a modest budget is rarely the question. We use DINO as the teacher, and VICReg (the
+% brief's default for a modest GPU) and LeJEPA as direct methods for the student.
+%
+% \paragraph{Knowledge distillation and self-supervised distillation.}
+% Classical distillation~\citep{hinton2015distilling} trains a student on a teacher's class
+% probabilities, so it needs labels, and treats the teacher's cost as given.
+% SEED~\citep{fang2021seed}, CompRess~\citep{koohpayegani2020compress} and
+% DisCo~\citep{gao2022disco} carry the idea over to self-supervised teachers and find that it
+% helps most exactly where direct self-supervised training struggles: on small, efficient
+% students. All three work with convnet teachers and students on ImageNet, compare against a
+% direct baseline at the same number of student epochs, and leave the teacher's pretraining out
+% of the cost. DisCo also finds that a narrow student embedding can bottleneck distillation,
+% which is why our distilled student keeps a wide projector during training.
+%
+% \paragraph{Cross-architecture distillation.}
+% When teacher and student come from different families, such as a Transformer and a convnet,
+% their intermediate features no longer line up. \citet{liu2022crossarch} align them with
+% learned cross-attention projectors, and OFA-KD~\citep{hao2023ofakd} shows the mismatch with
+% CKA and moves the alignment to the output. Both are supervised. We avoid the problem by
+% distilling only the teacher's final embedding, through a learned projector, without labels.
+%
+% \paragraph{Closest work.}
+% Two works frame the question we ask from opposite sides. \citet{shi2022smallssl} argue that
+% the teacher makes distillation expensive in resource-limited settings and show that small
+% models trained directly close much of the gap once their training is properly tuned; this is
+% why the VICReg student receives the full tuning effort here (Section~\ref{sec:tuning}).
+% \citet{farhat2024distillalt} find the opposite trend for task-specific distillation: small
+% students distilled from a pretrained teacher, including Transformer-to-convnet pairs, match or
+% beat pretraining and fine-tuning at a fraction of the cost, except when the task is
+% data-limited. Their setting is supervised and, like the distillation works above, does not
+% charge the teacher's pretraining.
+%
+% \paragraph{What is left open.}
+% Prior work either shows that distillation helps small students or that well-tuned direct
+% training catches up, but always on ImageNet-like data and without counting the teacher's
+% cost. No work measures \emph{where} distillation from a frozen self-supervised ViT stops
+% beating direct self-supervised training of a small convnet as student size, unlabeled data
+% and training length vary, under a budget that includes the teacher, or how that answer
+% changes on data the teacher has never seen. We look for that crossover with matched student
+% budgets, seed-level spreads, a cost accounting that includes the teacher's pretraining, and
+% a second, out-of-domain dataset.
+% <<< END SUGGESTION
 
 \paragraph{Self-supervised representation learning.}
 % FIX (section not yet rewritten by you): "We use DINO and Le-JEPA as the teacher" is wrong:
@@ -138,9 +197,7 @@ images at $96\times96$ pixels forming 10 classes. All 100k unlabeled images are 
 self-supervised training and distillation.
 To ensure consistency, the images are stored in a seeded random order, and the ablation subset is the first 50 thousand images of that order. 
 
-% FIX: "before actually training" is unclear; the validation split scores choices made before
-% the final (reported) runs.
-The labeled training set has three uses: (i)~A 10\% validation split (500 images, split evenly across classes) scores every tuning and selection choice before actually training, with the remaining 90\% as the $k$-NN neighbour bank.
+The labeled training set has three uses: (i)~A 10\% validation split (500 images, split evenly across classes) scores every tuning and selection choice before the final reported runs, with the remaining 90\% as the $k$-NN neighbour bank.
 (ii)~Five stratified folds of the full labeled set select the SVM hyperparameters.
 (iii)~The reported probes are fitted on label fractions of 1\%, 10\%, 50\% and 100\% of the
 full labeled set, three stratified draws each. The test split is used only for the reported numbers. Every encoder was probed on the same subsets.
@@ -152,9 +209,7 @@ large one (L) seeds 0--1. Runs seed Python, NumPy, PyTorch and the sampler.
 \subsection{View pool and teacher cache}
 \label{sec:pool}
 
-% FIX: K=20 is the view-pool size, not a k-NN parameter (k-NN uses k=20, a coincidence).
-% Typo: indeces.
-The trained students share the k-NN parameter $K=20$ augmented views per unlabeled image, generated
+The trained students share the $K=20$ augmented views per unlabeled image, generated
 once and stored due to compute constraints. A sampler permutes 64-image chunks each epoch and draws view indeces at random: two distinct views per image
 for the directly trained student, one for the distilled student. Because the views are fixed, the teacher's feature for every (image, view)
 pair is computed once and reused by every distilled student run, seed, size and data
@@ -172,14 +227,9 @@ spread \SpreadD, $k$-means NMI \NmiValD; Table~\ref{tab:diagnostics}).
 \paragraph{Student family ``ResNet96''.} A basic residual network adapted to
 96-pixel inputs: a $3\times3$ stride-2 stem without max pooling, four stages of two basic
 blocks with widths $w$/$2w$/$4w$/$8w$ and feature maps $48\to24\to12\to6$, global average
-% FIX (from the earlier review, still open): "BatchNorm and ReLU was" -> were; "only the seed
-% differs between the different experiments" is wrong (they differ in method, size, data...):
-% say that for a given seed all students start from the same weights; "according to the
-% literature" -> \citep[Table~1]{fang2021seed}; "I considered" vs "we" elsewhere.
-pooling, and no head. BatchNorm and ReLU was used in all layers. The initialization used Kaiming, and only the
-seed differs between the different experiments. Sizes differ by width only: S ($w=24$, \ParamsS{}M
+pooling, and no head. BatchNorm and ReLU were used in all layers. The initialization used Kaiming. For a given seed all students start from the same weights. Sizes differ by width only: S ($w=24$, \ParamsS{}M
 parameters, \FeatDimS-d) and L ($w=48$, \ParamsL{}M, \FeatDimL-d). The teacher is still around 3.5$\times$ larger than the largest student. I considered, but rejected depthwise/ConvNeXt-style blocks, which are
-weak under stock self-supervised recipes according to the literature and were 3.1$\times$ slower in our benchmark. Similarly, a
+weak under stock self-supervised recipes~\citep[Table~1]{fang2021seed} and were 3.1$\times$ slower in our benchmark. Similarly, a
 trained multi-scale fusion head was also rejected because it could adapt differently under different trained students (direct vs distilled) and add a
 second architectural difference to the performance gap. Multi-scale features are instead tested with an evaluation-only probe (Section~\ref{sec:multiscale}). Features are always extracted in eval mode; for the untrained student this means BatchNorm uses its default running statistics,
 so its features do not depend on batch composition.
@@ -187,14 +237,13 @@ so its features do not depend on batch composition.
 \subsection{Training the students}
 \label{sec:training}
 
-% FIX: "images for C" -> distilled; typo epock; "The directly trained students uses".
-Both students train for $E=100$ epochs with batch 256 (pairs for VICReg, images for C), AdamW
+Both students train for $E=100$ epochs with batch 256 (pairs for VICReg, images for distiled), AdamW
 ($\beta=(0.9,0.999)$, weight decay on the parameters). A linear warmup followed by a per-step
 cosine decay to zero was used, and bf16 autocast and channels-last memory layout. The learning rate,
 weight decay and warmup come from an Optuna trial on the VICReg student (Section~\ref{sec:tuning}) and are
 copied directly to the distilled student. Only the weights from the final epock were probed. Both students at the same size and data percentage thus take the same number of optimizer steps.
 
-The directly trained students uses lightly's \texttt{VICRegLoss} with default coefficients
+The directly trained students use lightly's \texttt{VICRegLoss} with default coefficients
 ($\lambda=\mu=25$, $\nu=1$) on a three-layer expander of width 2048, which is discarded after
 training. The distilled student maps the student feature through a projector
 $\mathrm{Linear}(d,2048)$--BN--GELU--$\mathrm{Linear}(2048,384)$, which is also discarded after training,
@@ -209,8 +258,7 @@ Tuning was done only on the S student and scored by $k$-NN ($k=20$, cosine) on t
 using the encoder's pooled feature. Per \citet{shi2022smallssl}, a weakly
 tuned VICReg student would inflate the distilled student's win, so VICReg received the optimizer search and the distilled student inherits it.
 
-% FIX: stray ")" after "16 trials"; "(6 trials per row" below -> per student.
-\paragraph{Optimizer.} One Optuna study using the smaller VICReg student was conducted with the following configuration: 100\% data, 20 epochs, one seed per trial, TPE sampler, median pruner, 16 trials) over learning rate $\in[3\cdot10^{-4},3\cdot10^{-3}]$
+\paragraph{Optimizer.} One Optuna study using the smaller VICReg student was conducted with the following configuration: 100\% data, 20 epochs, one seed per trial, TPE sampler, median pruner, 16 trials over learning rate $\in[3\cdot10^{-4},3\cdot10^{-3}]$
 (log), weight decay $\in[0.01,0.2]$ (log) and warmup $\in\{1,2,4\}$ epochs, with the
 default configuration ($10^{-3}$, 0.05, 2) queued as trial 0. The eventual winner was learning rate
 $2.86\cdot10^{-3}$, weight decay 0.110 and 2 warmup epochs, at 72.6\% validation $k$-NN
@@ -220,7 +268,7 @@ A similar LARS check (6 configurations) did not change the decision.
 
 \paragraph{Equal-effort head tuning.} With the winning optimizer, VICReg's expander width and distilled's
 projector hidden width were each searched over $\{1024, 2048, 4096\}$ with 2 seeds per point
-(6 trials per row, 20 epochs). A width would replace 2048 only if its two-seed mean beat
+(6 trials per student, 20 epochs). A width would replace 2048 only if its two-seed mean beat
 2048's by more than the larger of the two seed ranges. Both architectures kept 2048 in the end. This keeps the projection head search fair on both models, because both got an equal number of experiments. 
 
 \paragraph{Fixed-view control.} Since a fixed-view pool was used to reduce compute budget, we needed to check whether a fixed pool would handicap the model. The experiment conducted to check this was as follows: One matched pair of VICReg runs (S, 100\% data, 100 epochs, seed
@@ -268,12 +316,11 @@ magnitude exceeds the larger of B's and C's seed standard deviations.
 \subsection{Hardware, costs and throughput}
 \label{sec:compute}
 
-% FIX: the last sentence has no full stop; typo measuremntes.
 Every run, including tuning, used a laptop with an NVIDIA RTX 3060 Laptop GPU (6GB VRAM), 16 CPU
 threads, 16GB RAM. Parameters and FLOPs were counted at the encoder's native input (96 px
 students, 224 px teacher). GPU latency is measured at batch 256 in fp32 (10 warm-up and 100
 timed batches). CPU latency was measured at batch 1 with 16 threads (Table~\ref{tab:costs}). GPU
-time is recorded per run, and the teacher cache's GPU time is added to the distilled student. Some measurements on estimated total compute time were done before training to ensure it fit the project's schedule. These results are in the repository under \texttt{bench/RESULTS.md} and \texttt{bench/STUDENT\_RESULTS.md}. These measuremntes allowed us to confidently train on all 100k images, with $K=20$ and $E=100$
+time is recorded per run, and the teacher cache's GPU time is added to the distilled student. Some measurements on estimated total compute time were done before training to ensure it fit the project's schedule. These results are in the repository under \texttt{bench/RESULTS.md} and \texttt{bench/STUDENT\_RESULTS.md}. These measurements allowed us to confidently train on all 100k images, with $K=20$ and $E=100$.
 % =====================================================================================
 \section{Results}
 \label{sec:results}
