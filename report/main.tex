@@ -59,10 +59,9 @@ both sizes, and shrinks slightly from the small to large student. The verdict re
 \section{Introduction}
 \label{sec:intro}
 
-% SUGGEST: state the brief's hypothesis here (distillation wins for small students and small
-% budgets; direct training catches up as student, data and epochs grow). Related work's "What
-% is left open" and Q5/Q6 refer back to that crossover, but the intro never introduces it.
 Self-supervised learning has gained popularity in the last couple of years due to its strong results and comparatively less need for labeled data. The whole training process, however, is prohibitively expensive for many users. Even fine-tuning pre-trained models is still very expensive and the architectures produced usually surpass the application's compute budget. When we need a small lightweight model with self-supervised performance level, distillation can be a viable option. The alternative is training a lightweight model, such as a convnet, from scratch with a self-supervised objective. This project compares these two approaches and gives insight on what matters for a good lightweight model.
+
+The hypothesis stemming from the project brief is that distillation wins for small students and budgets, but as these increase (along with data volume), direct training is eventually better. 
 
 We compare the distillation versus direct training in a controlled setting: one frozen teacher (DINO ViT-S/16~\citep{caron2021dino}), a direct method (VICReg~\citep{bardes2022vicreg}), one student family designed for 96-pixel inputs at two widths, and two amounts of unlabeled STL-10 data~\citep{coates2011stl10}. The main comparison table compares 4 models: the student architecture with no training, trained from-scratch with VICReg, distilled from the teacher model, and the teacher itself. Additionally, we trained the student architecture with the LeJEPA objective, ran more student sizes and training lengths, and compared the out-of-domain EuroSAT dataset.
 
@@ -70,64 +69,20 @@ We compare the distillation versus direct training in a controlled setting: one 
 \section{Related work}
 \label{sec:related}
 
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% \paragraph{Self-supervised representation learning.}
-% Most self-supervised methods learn by making the representations of two views of the same
-% image agree, and differ mainly in how they prevent the trivial solution of mapping every
-% image to the same point. SimCLR~\citep{chen2020simclr} pushes other images in the batch away,
-% which works best with large batches and long schedules. BYOL~\citep{grill2020byol} drops
-% negatives and instead predicts a slowly updated copy of the network, and
-% DINO~\citep{caron2021dino} turns this into self-distillation, producing ViT features that are
-% strong nearest-neighbour classifiers. VICReg~\citep{bardes2022vicreg} prevents collapse
-% explicitly, by keeping every embedding dimension variable and decorrelated, and
-% LeJEPA~\citep{balestriero2025lejepa} replaces such heuristics with a single regularizer that
-% pushes the embedding towards an isotropic Gaussian. Masked methods take a different route:
-% I-JEPA~\citep{assran2023ijepa} predicts the representations of hidden image regions, and
-% MAE~\citep{he2022mae} reconstructs hidden pixels, which pays off mainly after fine-tuning
-% rather than with frozen probes. The trend across this line of work is towards large
-% encoders, long schedules and big datasets; how these objectives behave on a small convnet
-% with a modest budget is rarely the question. We use DINO as the teacher, and VICReg (the
-% brief's default for a modest GPU) and LeJEPA as direct methods for the student.
-%
-% \paragraph{Knowledge distillation and self-supervised distillation.}
-% Classical distillation~\citep{hinton2015distilling} trains a student on a teacher's class
-% probabilities, so it needs labels, and treats the teacher's cost as given.
-% SEED~\citep{fang2021seed}, CompRess~\citep{koohpayegani2020compress} and
-% DisCo~\citep{gao2022disco} carry the idea over to self-supervised teachers and find that it
-% helps most exactly where direct self-supervised training struggles: on small, efficient
-% students. All three work with convnet teachers and students on ImageNet, compare against a
-% direct baseline at the same number of student epochs, and leave the teacher's pretraining out
-% of the cost. DisCo also finds that a narrow student embedding can bottleneck distillation,
-% which is why our distilled student keeps a wide projector during training.
-%
-% \paragraph{Cross-architecture distillation.}
-% When teacher and student come from different families, such as a Transformer and a convnet,
-% their intermediate features no longer line up. \citet{liu2022crossarch} align them with
-% learned cross-attention projectors, and OFA-KD~\citep{hao2023ofakd} shows the mismatch with
-% CKA and moves the alignment to the output. Both are supervised. We avoid the problem by
-% distilling only the teacher's final embedding, through a learned projector, without labels.
-%
-% \paragraph{Closest work.}
-% Two works frame the question we ask from opposite sides. \citet{shi2022smallssl} argue that
-% the teacher makes distillation expensive in resource-limited settings and show that small
-% models trained directly close much of the gap once their training is properly tuned; this is
-% why the VICReg student receives the full tuning effort here (Section~\ref{sec:tuning}).
-% \citet{farhat2024distillalt} find the opposite trend for task-specific distillation: small
-% students distilled from a pretrained teacher, including Transformer-to-convnet pairs, match or
-% beat pretraining and fine-tuning at a fraction of the cost, except when the task is
-% data-limited. Their setting is supervised and, like the distillation works above, does not
-% charge the teacher's pretraining.
-%
-% \paragraph{What is left open.}
-% Prior work either shows that distillation helps small students or that well-tuned direct
-% training catches up, but always on ImageNet-like data and without counting the teacher's
-% cost. No work measures \emph{where} distillation from a frozen self-supervised ViT stops
-% beating direct self-supervised training of a small convnet as student size, unlabeled data
-% and training length vary, under a budget that includes the teacher, or how that answer
-% changes on data the teacher has never seen. We look for that crossover with matched student
-% budgets, seed-level spreads, a cost accounting that includes the teacher's pretraining, and
-% a second, out-of-domain dataset.
-% <<< END SUGGESTION
+\paragraph{Self-supervised representation learning.}
+Most self-supervised models train by learning to match two vies of the same image, differing mainly in how they prevent collapse (trivially mapping each image to the same point).  SimCLR~\citep{chen2020simclr} pushes treats different images of the batch as negative examples, pushing them away. This requires larege batches and long schedules. BYOL~\citep{grill2020byol} doesn't use the concept of negatives and instead forces a network to predict a slow-moving near copy of itself. DINO~\citep{caron2021dino} turns this into self-distillation, producing ViT features that are good nearest-neighbour classifiers. VICReg~\citep{bardes2022vicreg} explicitly keeps every embedding dimension variable and decorrelated. LeJEPA~\citep{balestriero2025lejepa} replaces heuristics with a single regularizer that shapes the embedding space towards an isotropic Gaussian. In addition to this there are masked approaches that take a different route, such as I-JEPA~\citep{assran2023ijepa} which predicts the representations of hidden image regions, and MAE~\citep{he2022mae} predicts hidden pixels. These models often have very large encoders, long schedules and enormous datasets. In this project, we are more interested in how this objectives behave on a small convnet.
+
+\paragraph{Knowledge distillation and self-supervised distillation.}
+Classical distillation~\citep{hinton2015distilling} usually trains a student netowrk on a teacher's class probabilities. This means it needs labels. SEED~\citep{fang2021seed}, CompRess~\citep{koohpayegani2020compress} and DisCo~\citep{gao2022disco} map the idea to self-supervised teachers and finds it helps exactly the small, efficient students. The works use convnet teachers and students on ImageNet, comparing a direct baseline training at the same number of student epochs. DiscCo finds that a narrow student embedding bottlnecks distillations, so we chose to keep a wide projector on our ``ResNet96''.
+
+\paragraph{Cross-architecture distillation.}
+To enable distilling students from teachers of other architectures (such as transformers), we have to align their intermediate features. \citet{liu2022crossarch} align them with learned cross-attention projectors. OFA-KD~\citep{hao2023ofakd} shows the mismatch with CKA and moves the alignment to the output. They are both supervised. We avoid this problem completely by distilling only the teacher's final embedding through a leanred projector without labels.
+
+\paragraph{Closest work.}
+We found two works that frame a question similar to the project's but from opposite sides. \citet{shi2022smallssl} argue that the teacher increases trainig cost in distillation and defend that small models can close the gap by properly tuning a direct training process. This motivated us to give the VICReg student all the tuning and optimization effort (Section~\ref{sec:tuning}). \citet{farhat2024distillalt} disagrees, favoring the distilled method in both performance and cost, but uses a supervised setting and does not consider the cost of the teacher's training.
+
+\paragraph{What is left open.}
+Related work disagrees on which approach is best, but they both use ImageNet-like data and don't count the cost of the teacher. There is an undocumented gap focused on where disillation from a frozen self-supervised ViT stops beating direct self-supervised training of a small convnet. We aim to answer that question across a variety of student sizes, unlabeled data ratio, training length, data domains and under a budget that includes the teacher.
 
 \paragraph{Self-supervised representation learning.}
 The most popular methods, called joint-embedding, optimize to align the representations of two views of an image.
@@ -270,74 +225,14 @@ than 2~pp validation $k$-NN. It did not: $\Delta_{\text{val}}=-0.2$~pp
 \subsection{Evaluation}
 \label{sec:eval}
 
-% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
-% Every encoder is evaluated the same way: its weights stay frozen, and simple classifiers
-% fitted on top of its features measure how useful those features are. Features are extracted
-% in evaluation mode with a deterministic transform (the native 96-pixel image for the
-% students, the teacher input of Section~\ref{sec:encoders}), L2-normalized, and standardized
-% with statistics from the labeled training subset only. Three probes look at the feature space
-% from different angles. $k$-NN (cosine, $k=\min(20, n_{\text{per class}})$, no tuning) asks
-% whether images of the same class are close together; a linear SVM asks whether the classes
-% can be separated by a hyperplane; an RBF SVM allows curved boundaries. Agreement between the
-% three makes a result more robust than any single probe. All probes are fitted on the same
-% label subsets and scored on the test split.
-%
-% The SVM hyperparameters were chosen once, by 5-fold cross-validation on the full labeled set,
-% using a VICReg encoder (S, 100\% data, seed 0), and then frozen for every encoder, label
-% fraction, draw and the multi-scale probe: $C=0.01$ for the linear SVM and $C=100$,
-% $\gamma=\texttt{scale}$ for the RBF SVM (\texttt{tuning/svm\_selection.json}). Selecting on a
-% VICReg encoder can only favour VICReg, so it does not inflate the distilled student's win. The
-% RBF choice lies at the edge of its grid, but the next value scored the same, so the edge is
-% not limiting.
-%
-% \paragraph{Diagnostics.} Probes need labels; the diagnostics do not. An encoder is flagged as
-% collapsed if, on the validation split, its $k$-NN accuracy or $k$-means ($k=10$) NMI is no
-% better than the untrained student's at the same size and seed, or if its \emph{spread}
-% (per-dimension standard deviation of the L2-normalized embeddings, times $\sqrt d$) falls
-% below 0.3, meaning most of the embedding lives in a few dimensions. The check ran after every
-% tuning trial and every reported run. On the test split we also report $k$-means NMI and ARI,
-% which ask whether the classes form clusters without any supervision, and a t-SNE projection
-% with the same settings for all encoders.
-%
-% \paragraph{Aggregation.} Each probe result is first averaged over the three label draws of a
-% seed, and then summarized as mean $\pm$ standard deviation over seeds (three for S, two for
-% L, whose individual runs are listed in Table~\ref{tab:l-runs}). The spread therefore compares
-% training runs, which is what the brief's ``seed-to-seed spread'' refers to; the brief asks
-% for the draws to be included, so this is a deliberate departure. The teacher is a single
-% checkpoint, so its $\pm$ is the spread over draws. A difference between the distilled and
-% VICReg students counts as real only if it exceeds the larger of their two seed standard
-% deviations.
-% <<< END SUGGESTION
-An extraction function computes frozen features in evaluation mode under \texttt{no\_grad} with a
-deterministic transform: the native 96-pixel image for students (no resize or crop is
-needed at native resolution) and the teacher input of Section~\ref{sec:encoders}. Features
-are L2-normalized and then standardized with a scaler fitted on the training subset only.
-Three probes are fitted on every label subset and scored on the test split: $k$-NN (cosine,
-$k=\min(20, n_{\text{per class}})$, untuned), a linear SVM (\texttt{LinearSVC}) and an RBF
-SVM (\texttt{SVC}), without subsampling (5k training images).
+Every encoder is evaluated the same way: freeze the weights and fit simple classifiers on top of its features to measure how useful the features are. The features were extracted in eval mode using a deterministic transform (the original 96-pixel image for the students, the teacher input of Section~\ref{sec:encoders}), L2-normalized and standardized with the statistics of the labeled training set. We measured the features space with three different probes: $k$-NN (cosine, $k=\min(20, n_{\text{per class}})$, no tuning), a linear SVM and an RBF SVM. $k$-NN checks if images of the same class are close. The linear SVM checks if they are seperable by a hyperplane, and RBF SVM expands that by allowing curved boundaries.
 
-The SVM hyperparameters were selected once, by 5-fold cross-validation on the full labeled
-set, on the first reported VICReg encoder (S, 100\% data, seed 0), and then frozen for every
-encoder, label fraction, draw and the multi-scale probe: linear $C=0.01$ (CV 81.2\%) from
-$\{10^{-3},\dots,10^{2}\}$, and RBF $C=100$, $\gamma=\texttt{scale}$ (CV 82.2\%) from
-$C\in\{0.1,1,10,100\}\times\gamma\in\{0.1,1,10,\texttt{scale}\}$
-(\texttt{tuning/svm\_selection.json}). $C=100$ is the edge of the grid, but $C=10$ scored
-82.18\%, effectively tied, so the edge is not limiting.
+The SVM hyperparamaters were chosen by a 5-fold cross-validation on the entire labeled set, using a small VICReg encoder with 100\% data, frozen thereafter for every other run, yielding $C=0.01$ for the linear SVM and $C=100$, $\gamma=\texttt{scale}$ for the RBF SVM. This favors the VICReg student, so it doesn't explain distillation's win. 
 
-\paragraph{Diagnostics.} An encoder is collapse-flagged if, on the validation split, its
-$k$-NN accuracy or $k$-means ($k=10$) NMI is at most that of the untrained student at the same size and
-seed, or its \emph{spread} (per-dimension standard deviation of L2-normalized embeddings
-times $\sqrt d$) is below 0.3. The check ran after every tuning trial and every reported
-run; no reported run was flagged (Table~\ref{tab:diagnostics}). On the test split we report
-$k$-means NMI and ARI and a t-SNE projection (perplexity 30, \texttt{random\_state=0}, same
-parameters for all encoders).
+\paragraph{Diagnostics.} During the runs, we checked for collapse by measuring its $k$-NN accuracy or $k$-means ($k=10$) NMI on the validation split and comparing it to the untrained student's metrics. Specifically, if its spread (per-dimension standard deviation of the L2-normalized embeddings, times $\sqrt d$) falls below 0.3, which means most of the embeddings live in just a few dimensions. 
 
-\paragraph{Aggregation.} For each encoder and probe we average the three label draws within
-a seed, then report mean $\pm$ standard deviation over seeds (3 for S, 2 for L; the L runs
-are also listed individually in Table~\ref{tab:l-runs}). The teacher is one checkpoint, so its
-$\pm$ is the standard deviation over draws. A gap between the distilled and VICReg students is
-\emph{beyond spread} only if its magnitude exceeds the larger of their two seed standard
-deviations.
+The probe results are averaged over the label draws of a seed and then summarized as a mean $\pm$ standard deviation over the seeds. The results therefore compare training runs. Since the teacher is a loaded checkpoint, its $\pm$ is the spread over draws. We only consider a difference between the distilled and VICReg student to be significant if the gap exceeds the larger of the seed standard deviations.
+
 
 \subsection{Hardware, costs and throughput}
 \label{sec:compute}
@@ -384,8 +279,6 @@ accuracy against the teacher's \AccDLinHundred\%, and the small one \AccCSFullLi
 
 \input{generated/budget}
 
-% SUGGEST: a footnote with the two measurement notes (one VICReg epoch's impossible GPU time was
-% capped at its wall time; the teacher cache was timed on a shared GPU, so it is overstated).
 It depends on how you count it, especially whether we include the pretraining budget. If we include it, direct training is orders of magnitude cheaper in compute. Otherwise, it reverses. Because the distilled student uses one view per image instead of VICReg's two, the distilled trains faster (and cheaper) than its competition, apart from being more accurate. Even the longest-trained VICReg students, the 300-epoch runs of Section~\ref{sec:long300}, did not beat the cheapest distilled configuration. The detour is definitely worth it when a free teacher checkpoint is available, but not if we have to pretrain it ourselves.
 
 \subsection{Q4: Do the unsupervised diagnostics agree with the probes?}
@@ -401,9 +294,6 @@ It depends on how you count it, especially whether we include the pretraining bu
   \label{fig:tsne}
 \end{figure}
 
-% SUGGEST: one EuroSAT VICReg seed (S, 50% data) lost ~10 pp; its spread and NMI dropped, but it
-% passed the collapse check, so the binary check only catches total collapse and the continuous
-% diagnostics are the more informative signal. Good answer to "do the diagnostics agree".
 Mostly yes. The ordering is preserved (Untrained < VICReg < Distilled < Teacher on all metrics in STL-10), but the spread is different. Since VICReg's variance term pushes each dimension's standard deviation up, compared to a single view matching with teacher in the distilled student, it is expected that the directly trained student presents higher spread. And as Section~\ref{sec:eurosat} shows, the out-of-domain order changes with the teacher dropping position, even behind VICReg.
 
 The project brief also asks what changes when two encoders score the same on the SVM but differ in NMI. This is most visible across distinct seeds of the distilled student: the linear-SVM standard deviation of the large distilled student with 100\% data is \AccSdCLFullLinHundred~pp, while its test ARI varies by $\pm$\,0.09, its test NMI by $\pm$\,0.04. K-means uses fixed seeds, so k-means instability is unlikely to be the main source of the variation. Even then, a different geometry can land k-means in a different local optimum, so the variation probably comes from the encoders, but some of it may be amplified by k-means itself. 
@@ -447,8 +337,7 @@ Adding stage-3 features seems to help VICReg slightly when all labels are used, 
 \section{Extra experiments (after the freeze)}
 \label{sec:extras}
 
-% SUGGEST: say they ran after the freeze, untuned, and are reported separately from the main study.
-Beyond the initial 20 runs, we ran four extra experiments using the frozen configurations. This involved a second, out-of-domain dataset (EuroSAT), more student sizes, longer training, and an additional LeJEPA objective student to compare against VICReg and distillation.
+Beyond the initial 20 runs, we ran four extra experiments using the frozen configurations inherited from the main STL-10 study, no retuning. This involved a second, out-of-domain dataset (EuroSAT), more student sizes, longer training, and an additional LeJEPA objective student to compare against VICReg and distillation.
 
 \subsection{Second dataset: EuroSAT}
 \label{sec:eurosat}
@@ -465,21 +354,14 @@ Beyond the initial 20 runs, we ran four extra experiments using the frozen confi
 
 \paragraph{Setup.} EuroSAT RGB~\citep{helber2019eurosat} consists of 27k satellite images of 10 classes, each a different land use. These images are very different from ImageNet's, so the teacher has never seen this domain. Since the dataset has no official train/test split, we used a stratified 80\% for training and the remaining 20\% for test. The unlabeled set is the entire training set (labels removed), and a stratified 5k-image subset of it is the labeled set for the probes. To match the student input, the 64$\times$64 images were upscaled to 96$\times$96 pixels. The full study was rerun with the frozen settings, and the teacher passed its sanity check on this data. 
 
-% SUGGEST: add (i) VICReg ties/wins at 1% labels; (ii) part of the STL-10 gap likely comes from
-% the teacher's ImageNet exposure (links to Confounds); (iii) caveats: the teacher sees heavily
-% upsampled 64 px images; one VICReg run (S, 50% data) partly failed, inflating that cell.
-\paragraph{Results.} Out of the teacher's domain, distillation's advantage against VICReg shrinks significantly, and so does the teacher's. In this setup, both the distilled and VICReg student were able to match or even outperform the teacher with few labels. With all labels, distilled student is still able to match teacher performance. One caveat of these results is that EuroSAT is an easier task, as even the untrained student was able to get better performance compared with the STL-10 dataset.
+\paragraph{Results.} Out of the teacher's domain, distillation's advantage against VICReg shrinks significantly, and so does the teacher's. In this setup, both the distilled and VICReg student were able to match or even outperform the teacher with few labels. At 1\% of labels, VICReg ties or wins agains the other methods. With all labels, distilled student is still able to match teacher performance. This means part of the gap measured with STL-10 comes from the fact that the teacher was pretrained on ImageNet. One caveat of these results is that EuroSAT is an easier task, as even the untrained student was able to get better performance compared with the STL-10 dataset. Also, the teacher sees a heavily upsampled images from 64 pixels to 224 pixels. 
 
 \subsection{A second direct method: LeJEPA}
 \label{sec:lejepa}
 
-% SUGGEST: setup in one line (reference defaults, 2 views instead of the paper's multi-crop,
-% S student, 2 seeds).
-To explore more training methods, we copied the VICReg student configuration and swapped the objective with LeJEPA's~\citep{balestriero2025lejepa}, which regularizes the embedding towards an isotropic Gaussian, to directly train a student. This not only gives an opportunity to compare VICReg against LeJEPA, but also tests whether the gap is specific to VICReg or holds for direct training more generally.
+To explore more training methods, we copied the VICReg small student configuration and swapped the objective with LeJEPA's~\citep{balestriero2025lejepa}, which regularizes the embedding towards an isotropic Gaussian, to directly train a student. This not only gives an opportunity to compare VICReg against LeJEPA, but also tests whether the gap is specific to VICReg or holds for direct training more generally.
 
-% SUGGEST: the EuroSAT point worth making: there, swapping VICReg for LeJEPA roughly doubles the
-% gap, so out of domain the choice of direct method matters about as much as distillation.
-LeJEPA did not beat VICReg on either dataset, and was slightly worse overall. The gap between distilled and directly trained barely changes on STL-10, which gives us more confidence that distillation still beats a comparable generic directly trained student. In EuroSAT, LeJEPA performed comparatively worse than in STL-10. This should be taken with a grain of salt though, as LeJEPA was trained on an optimizer tuned for VICReg, so it is not its best performance.
+LeJEPA did not beat VICReg on either dataset, and was slightly worse overall. The gap between distilled and directly trained barely changes on STL-10, which gives us more confidence that distillation still beats a comparable generic directly trained student. In EuroSAT, LeJEPA performed comparatively worse than in STL-10. There, the training objective gap is as large as the distilled versus VICReg gap. This should be taken with a grain of salt though, as LeJEPA was trained on an optimizer tuned for VICReg, so it is not its best performance.
 
 \subsection{Longer training ($E=300$)}
 \label{sec:long300}
@@ -494,8 +376,7 @@ LeJEPA did not beat VICReg on either dataset, and was slightly worse overall. Th
   \label{fig:extras-long300-curves}
 \end{figure}
 
-% SUGGEST: mention 2 seeds, S only.
-Extended training on the small student showed us that we could have squeezed more performance out of VICReg. With triple the epochs, VICReg improved double the amount that the distilled student did. At this point, the distilled student's training curve has pretty much plateaued, while VICReg is still improving. This indicates that the distilled student learns faster, but is limited by its capacity (which larger students relieve - Section~\ref{sec:sizes}), and VICReg is limited by the training budget. For VICReg to surpass distillation, we would need much more training than a laptop GPU could offer. It is important to note that only the endpoints are comparable with the original training, because the cosine schedule stretches as the run length grows. 
+Extended training on the small student across 2 seeds showed us that we could have squeezed more performance out of VICReg. With triple the epochs, VICReg improved double the amount that the distilled student did. At this point, the distilled student's training curve has pretty much plateaued, while VICReg is still improving. This indicates that the distilled student learns faster, but is limited by its capacity (which larger students relieve - Section~\ref{sec:sizes}), and VICReg is limited by the training budget. For VICReg to surpass distillation, we would need much more training than a laptop GPU could offer. It is important to note that only the endpoints are comparable with the original training, because the cosine schedule stretches as the run length grows. 
 
 \subsection{More student sizes}
 \label{sec:sizes}
@@ -570,9 +451,6 @@ Since we previously observed that there was some undertraining, it is important 
 \subsection{Limitations}
 \label{sec:limitations}
 
-% SUGGEST: restore the limitations that were dropped: the tuning proxy (20-epoch trials, best LR at
-% the edge of the search space), fixed views (one-pair control), L and all extras on 2 seeds,
-% extras untuned, the collapse check catching only total collapse.
 Since we covered more than one student objective and dataset, the main limitations are that no other teachers were analyzed and the number of training runs was limited. This is mostly due to time and compute constraints. Without them, we could do more Optuna studies, compare more teachers, use on-the-fly augmentation, compare more seeds and run training until convergence.  
 
 \section{Use of generative AI tools}
@@ -580,11 +458,7 @@ Since we covered more than one student objective and dataset, the main limitatio
 
 % =====================================================================================
 
-% TODO (your content): the course requires naming which code parts or steps used AI. One line is thin: list the
-% parts (pipeline, training loops, probes, report generator, extras, tests), what you decided
-% yourself, and how correctness was checked (unit tests, sanity checks). Also state that AI drafts
-% were used as starting points for some report sections that you then rewrote, and which ones.
-AI tools were useful in coding the training scripts at the student's (the author, not the model) discretion, as well as organizing the repository and revising the final report. 
+AI tools were useful in coding the training scripts at the student's (the author, not the model) discretion. This includes conducting the optuna study, generator scripts for figures and tables as well as organizing the repository and making sure everything is reproducible. AI was also used to help understand course topics, related work and revising the final report. 
 \clearpage
 \section{Conclusion}
 \label{sec:conclusion}
@@ -598,8 +472,6 @@ published as a release. \todo{link the repository and the checkpoint release}
 \subsection{Suggestions for improvement}
 \label{sec:suggestions}
 
-% SUGGEST adding: patch-token distillation, longer training (also
-% on EuroSAT), more seeds.
 Introducing a DINO-trained convnet as another direct method would further clarify the difference in objective against the teacher. Optimizing as much as we can each direct method (instead of relying on VICReg's configuration for all students), and running LeJEPA with multi-crop could also test whether a stronger baseline narrows the gap to distillation, especially on the out-of-domain EuroSAT dataset. A second teacher such as MAE and a teacher pretrained on EuroSAT's domain would help understand the impact of training method versus domain. 
 
 % =====================================================================================
