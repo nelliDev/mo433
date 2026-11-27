@@ -170,7 +170,7 @@ embedding, through a learned projector, without labels.
 % FIX: "row B" -> the VICReg student.
 \citet{shi2022smallssl} argue that distillation is costly in resource-limited settings
 because of the teacher, and show that small self-supervised models trained directly close
-much of the gap once their training is tuned; this is why row B receives the full tuning
+much of the gap once their training is tuned; this is why the VICReg student receives the full tuning
 effort here (Section~\ref{sec:tuning}). The closest prior work to our question is
 \citet{farhat2024distillalt}, who find that small models distilled from a pretrained teacher
 (including Transformer--convnet pairs) match or beat pretrain-then-finetune at a fraction
@@ -282,6 +282,44 @@ than 2~pp validation $k$-NN. It did not: $\Delta_{\text{val}}=-0.2$~pp
 
 % FIX (section not yet rewritten by you): still uses row letters (row A, D, B-S-100-s0, \CB).
 % The encoder-registry clause is an implementation detail; can go.
+% >>> SUGGESTION (Claude draft, rewrite in your own words before uncommenting):
+% Every encoder is evaluated the same way: its weights stay frozen, and simple classifiers
+% fitted on top of its features measure how useful those features are. Features are extracted
+% in evaluation mode with a deterministic transform (the native 96-pixel image for the
+% students, the teacher input of Section~\ref{sec:encoders}), L2-normalized, and standardized
+% with statistics from the labeled training subset only. Three probes look at the feature space
+% from different angles. $k$-NN (cosine, $k=\min(20, n_{\text{per class}})$, no tuning) asks
+% whether images of the same class are close together; a linear SVM asks whether the classes
+% can be separated by a hyperplane; an RBF SVM allows curved boundaries. Agreement between the
+% three makes a result more robust than any single probe. All probes are fitted on the same
+% label subsets and scored on the test split.
+%
+% The SVM hyperparameters were chosen once, by 5-fold cross-validation on the full labeled set,
+% using a VICReg encoder (S, 100\% data, seed 0), and then frozen for every encoder, label
+% fraction, draw and the multi-scale probe: $C=0.01$ for the linear SVM and $C=100$,
+% $\gamma=\texttt{scale}$ for the RBF SVM (\texttt{tuning/svm\_selection.json}). Selecting on a
+% VICReg encoder can only favour VICReg, so it does not inflate the distilled student's win. The
+% RBF choice lies at the edge of its grid, but the next value scored the same, so the edge is
+% not limiting.
+%
+% \paragraph{Diagnostics.} Probes need labels; the diagnostics do not. An encoder is flagged as
+% collapsed if, on the validation split, its $k$-NN accuracy or $k$-means ($k=10$) NMI is no
+% better than the untrained student's at the same size and seed, or if its \emph{spread}
+% (per-dimension standard deviation of the L2-normalized embeddings, times $\sqrt d$) falls
+% below 0.3, meaning most of the embedding lives in a few dimensions. The check ran after every
+% tuning trial and every reported run. On the test split we also report $k$-means NMI and ARI,
+% which ask whether the classes form clusters without any supervision, and a t-SNE projection
+% with the same settings for all encoders.
+%
+% \paragraph{Aggregation.} Each probe result is first averaged over the three label draws of a
+% seed, and then summarized as mean $\pm$ standard deviation over seeds (three for S, two for
+% L, whose individual runs are listed in Table~\ref{tab:l-runs}). The spread therefore compares
+% training runs, which is what the brief's ``seed-to-seed spread'' refers to; the brief asks
+% for the draws to be included, so this is a deliberate departure. The teacher is a single
+% checkpoint, so its $\pm$ is the spread over draws. A difference between the distilled and
+% VICReg students counts as real only if it exceeds the larger of their two seed standard
+% deviations.
+% <<< END SUGGESTION
 An extraction function, behind an encoder registry that never branches on the row,
 computes frozen features in evaluation mode under \texttt{no\_grad} with a
 deterministic transform: the native 96-pixel image for students (no resize or crop is
